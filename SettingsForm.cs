@@ -55,6 +55,17 @@ public sealed class SettingsForm : Form
         });
         y += 26;
 
+        _rbSherpa = Add(new RadioButton
+        {
+            Text     = "GigaAM v2  —  точный, русский (226 МБ)",
+            Font     = new Font("Segoe UI", 10),
+            Checked  = cfg.Engine == "sherpa",
+            Enabled  = File.Exists(AppConfig.SherpaModel),
+            Location = new Point(m, y),
+            Size     = new Size(420, 22),
+        });
+        y += 26;
+
         _rbWhisper = Add(new RadioButton
         {
             Text     = "Whisper  —  мультиязычный (466 МБ)",
@@ -77,17 +88,6 @@ public sealed class SettingsForm : Form
             Size      = new Size(420, 18),
         });
         y += 22;
-
-        _rbSherpa = Add(new RadioButton
-        {
-            Text     = "GigaAM v2  —  точный, русский (226 МБ)",
-            Font     = new Font("Segoe UI", 10),
-            Checked  = cfg.Engine == "sherpa",
-            Enabled  = File.Exists(AppConfig.SherpaModel),
-            Location = new Point(m, y),
-            Size     = new Size(420, 22),
-        });
-        y += 26;
 
         Add(Separator(ref y));
 

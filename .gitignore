@@ -3,3 +3,7 @@ obj/
 dist/
 *.user
 .vs/
+*.onnx
+*.bin
+*.tar.bz2
+sherpa-onnx-nemo-ctc-giga-am-v2-russian-2025-04-19/
