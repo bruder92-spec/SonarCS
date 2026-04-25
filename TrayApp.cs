@@ -7,13 +7,6 @@ namespace VoiceTyper;
 /// <summary>
 /// Основной контекст приложения v2.
 ///
-/// Новое в v2:
-///   - горячая клавиша берётся из config.json (HotkeyVk)
-///   - окно настроек (SettingsForm) вместо сброса через меню
-///   - постобработка текста (PostProcess)
-///   - логирование в VoiceTyper.log (ротация по 1 МБ)
-///   - GPU-статус Whisper (Vulkan) отображается в тултипе
-///
 /// Цвета иконки:
 ///   Синий  (#1E78FF) — готов
 ///   Красный (#DC2828) — запись
@@ -35,6 +28,7 @@ public sealed class TrayApp : ApplicationContext
     private WhisperEngine? _whisper;
     private AudioCapture?  _audio;
     private KeyboardHook?  _hook;
+    private bool           _settingsOpen;
 
     private enum State { Loading, Ready, Recording, Recognizing, Error }
     private volatile State _state = State.Loading;
@@ -42,8 +36,6 @@ public sealed class TrayApp : ApplicationContext
 
     public TrayApp()
     {
-        Logger.Info("── VoiceTyper запуск ──────────────────────────────────");
-
         _tray = new NotifyIcon
         {
             Visible          = true,
@@ -67,9 +59,6 @@ public sealed class TrayApp : ApplicationContext
                 if (_config is null) { Shutdown(); return; }
                 _config.Save();
             }
-
-            Logger.Info($"Конфиг: engine={_config.Engine}, mic={_config.MicrophoneDevice}, " +
-                        $"hotkey=0x{_config.HotkeyVk:X2}, postProcess={_config.PostProcess}");
 
             SetState(State.Loading, "Загрузка модели…");
 
@@ -102,12 +91,11 @@ public sealed class TrayApp : ApplicationContext
             _tray.ContextMenuStrip = BuildMenu(engineLabel, micLabel);
 
             SetState(State.Ready, $"Готов  [{engineLabel}]  [{micLabel}]");
-            Logger.Info($"Готов. Клавиша: {SettingsForm.VkName(_config.HotkeyVk)}");
         }
         catch (Exception ex)
         {
-            Logger.Error("Ошибка инициализации", ex);
-            SetState(State.Error, "Ошибка инициализации — см. VoiceTyper.log");
+            Console.Error.WriteLine($"[init] {ex}");
+            SetState(State.Error, "Ошибка инициализации");
             MessageBox.Show(ex.Message, "Voice Typer — Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
@@ -116,10 +104,7 @@ public sealed class TrayApp : ApplicationContext
     private string GetEngineLabel()
     {
         if (_config?.Engine == "whisper")
-        {
-            string gpu = (_whisper?.IsGpu == true) ? " [GPU]" : " [CPU]";
-            return "Whisper Small" + gpu;
-        }
+            return "Whisper Small" + (_whisper?.IsGpu == true ? " [GPU]" : " [CPU]");
         return "VOSK";
     }
 
@@ -229,10 +214,7 @@ public sealed class TrayApp : ApplicationContext
         _config.MicrophoneDevice = deviceIndex;
         _config.Save();
         _audio.DeviceNumber = deviceIndex;
-        Logger.Info($"Микрофон изменён на {deviceIndex}");
-
-        string micLabel = GetMicName(deviceIndex);
-        _tray.ContextMenuStrip = BuildMenu(GetEngineLabel(), micLabel);
+        _tray.ContextMenuStrip = BuildMenu(GetEngineLabel(), GetMicName(deviceIndex));
     }
 
     private static string GetMicName(int device)
@@ -245,12 +227,14 @@ public sealed class TrayApp : ApplicationContext
     // ── окно настроек ─────────────────────────────────────────────────────────
     private void OpenSettings()
     {
-        if (_config is null) return;
+        if (_config is null || _settingsOpen) return;
+        _settingsOpen = true;
         var sta = new Thread(() =>
         {
             Application.EnableVisualStyles();
             using var form = new SettingsForm(_config);
             form.ShowDialog();
+            _settingsOpen = false;
         });
         sta.SetApartmentState(ApartmentState.STA);
         sta.IsBackground = true;
@@ -265,9 +249,22 @@ public sealed class TrayApp : ApplicationContext
             if (_state != State.Ready) return;
             _state = State.Recording;
         }
-        _audio!.StartRecording();
-        SetState(State.Recording, "Запись…");
-        Logger.Info("Запись начата");
+        try
+        {
+            _audio!.StartRecording();
+            SetState(State.Recording, "Запись…");
+        }
+        catch (Exception ex)
+        {
+            lock (_lock) { _state = State.Ready; }
+            SetState(State.Error, "Ошибка микрофона");
+            _tray.BalloonTipTitle = "Voice Typer — Ошибка микрофона";
+            _tray.BalloonTipText  = ex.Message;
+            _tray.BalloonTipIcon  = ToolTipIcon.Error;
+            _tray.ShowBalloonTip(4000);
+            // через 4 сек возвращаемся в Ready
+            _ = Task.Delay(4000).ContinueWith(_ => SetState(State.Ready, "Готов  [" + GetEngineLabel() + "]"));
+        }
     }
 
     private void OnKeyUp()
@@ -280,7 +277,6 @@ public sealed class TrayApp : ApplicationContext
             pcm = _audio!.StopRecording();
         }
         SetState(State.Recognizing, "Распознавание…");
-        Logger.Info($"Запись остановлена, PCM байт: {pcm.Length}");
         _ = RecognizeAsync(pcm);
     }
 
@@ -300,23 +296,14 @@ public sealed class TrayApp : ApplicationContext
                     if (_config?.PostProcess == true)
                         text = TextProcessor.Process(text);
 
-                    Logger.Info($"[{engLabel}] Вставка: «{text}»");
                     Console.WriteLine($"[{engLabel}] {text}");
                     TextTyper.Type(text + " ");
                 }
-                else
-                {
-                    Logger.Info($"[{engLabel}] Пустой результат");
-                }
-            }
-            else
-            {
-                Logger.Warn("PCM пустой — запись слишком короткая?");
             }
         }
         catch (Exception ex)
         {
-            Logger.Error("Ошибка распознавания", ex);
+            Console.Error.WriteLine($"[recognition] {ex}");
             _tray.BalloonTipTitle = "Voice Typer — Ошибка";
             _tray.BalloonTipText  = ex.Message;
             _tray.BalloonTipIcon  = ToolTipIcon.Error;
@@ -331,7 +318,6 @@ public sealed class TrayApp : ApplicationContext
     // ── завершение ────────────────────────────────────────────────────────────
     private void Shutdown()
     {
-        Logger.Info("Завершение работы");
         _hook?.Dispose();
         _audio?.Dispose();
         _whisper?.Dispose();

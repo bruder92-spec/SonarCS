@@ -19,6 +19,7 @@ public sealed class SettingsForm : Form
     private readonly Button      _btnHotkey;
     private readonly Label       _lblHotkeyHint;
     private readonly CheckBox    _chkPost;
+    private readonly CheckBox    _chkAutoStart;
 
     private bool _capturing;
     private int  _capturedVk;
@@ -29,7 +30,7 @@ public sealed class SettingsForm : Form
         _capturedVk = cfg.HotkeyVk;
 
         Text            = "Voice Typer — Настройки";
-        ClientSize      = new Size(460, 480);
+        ClientSize      = new Size(460, 570);
         StartPosition   = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox     = false;
@@ -113,6 +114,16 @@ public sealed class SettingsForm : Form
             Location  = new Point(m, y),
             Size      = new Size(420, 18),
         });
+        y += 22;
+
+        Add(new Label
+        {
+            Text      = "Нельзя назначить: Shift, Ctrl",
+            Font      = new Font("Segoe UI", 9),
+            ForeColor = Color.FromArgb(180, 60, 60),
+            Location  = new Point(m, y),
+            Size      = new Size(420, 18),
+        });
         y += 30;
 
         Add(Separator(ref y));
@@ -139,6 +150,19 @@ public sealed class SettingsForm : Form
             Size      = new Size(420, 18),
         });
         y += 36;
+
+        Add(Separator(ref y));
+
+        // ── Автозапуск ────────────────────────────────────────────────────────
+        _chkAutoStart = Add(new CheckBox
+        {
+            Text     = "Запускать автоматически при входе в Windows",
+            Font     = new Font("Segoe UI", 10),
+            Checked  = AutoStartManager.IsEnabled,
+            Location = new Point(m, y),
+            Size     = new Size(420, 22),
+        });
+        y += 28;
 
         // ── Кнопки ────────────────────────────────────────────────────────────
         var btnApply = new Button
@@ -172,40 +196,55 @@ public sealed class SettingsForm : Form
     // ── Захват горячей клавиши ────────────────────────────────────────────────
     private void BtnHotkey_Click(object? sender, EventArgs e)
     {
-        _capturing         = true;
-        _btnHotkey.Text    = "Нажмите клавишу…";
-        _lblHotkeyHint.Text = "Esc — отмена";
+        _capturing           = true;
+        _btnHotkey.Text      = "Нажмите клавишу…";
+        _lblHotkeyHint.Text  = "Esc — отмена";
         _btnHotkey.BackColor = Color.FromArgb(255, 240, 180);
+        ActiveControl        = null;   // убираем фокус с кнопки на форму
     }
 
-    protected override void WndProc(ref Message m)
+    // ProcessCmdKey перехватывает ВСЕ клавиши на уровне формы,
+    // включая WM_SYSKEYDOWN (Alt), независимо от того, какой контрол в фокусе.
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         const int WM_KEYDOWN    = 0x0100;
         const int WM_SYSKEYDOWN = 0x0104;
 
-        if (_capturing && (m.Msg == WM_KEYDOWN || m.Msg == WM_SYSKEYDOWN))
+        if (_capturing && (msg.Msg == WM_KEYDOWN || msg.Msg == WM_SYSKEYDOWN))
         {
-            int vk = (int)m.WParam;
-            if (vk == 0x1B)                     // Escape — отмена
+            int vk = (int)msg.WParam;
+
+            if (vk == 0x1B)   // Escape — отмена
             {
                 FinishCapture(_cfg.HotkeyVk);
+                return true;
             }
-            else if (vk != 0x10 && vk != 0x11 && vk != 0x12)  // не чистый Shift/Ctrl/Alt
+
+            // Для Alt (0x12) определяем левый/правый по extended-биту lParam
+            if (vk == 0x12)
+            {
+                bool extended = ((int)msg.LParam & 0x01000000) != 0;
+                FinishCapture(extended ? 0xA5 : 0xA4);
+                return true;
+            }
+
+            // Чистые Shift (0x10) и Ctrl (0x11) пропускаем — они не годятся как одиночные хоткеи
+            if (vk != 0x10 && vk != 0x11)
             {
                 FinishCapture(vk);
+                return true;
             }
-            return;
         }
-        base.WndProc(ref m);
+        return base.ProcessCmdKey(ref msg, keyData);
     }
 
     private void FinishCapture(int vk)
     {
-        _capturing              = false;
-        _capturedVk             = vk;
-        _btnHotkey.Text         = VkName(vk);
-        _btnHotkey.BackColor    = SystemColors.Control;
-        _lblHotkeyHint.Text     = "Нажмите кнопку выше, затем нажмите нужную клавишу";
+        _capturing           = false;
+        _capturedVk          = vk;
+        _btnHotkey.Text      = VkName(vk);
+        _btnHotkey.BackColor = SystemColors.Control;
+        _lblHotkeyHint.Text  = "Нажмите кнопку выше, затем нажмите нужную клавишу";
     }
 
     // ── Применить ─────────────────────────────────────────────────────────────
@@ -217,8 +256,8 @@ public sealed class SettingsForm : Form
         _cfg.PostProcess     = _chkPost.Checked;
         _cfg.Save();
 
-        Logger.Info($"Настройки сохранены: engine={_cfg.Engine}, mic={_cfg.MicrophoneDevice}, " +
-                    $"hotkey=0x{_cfg.HotkeyVk:X2}, postProcess={_cfg.PostProcess}");
+        if (_chkAutoStart.Checked) AutoStartManager.Enable();
+        else                       AutoStartManager.Disable();
 
         var exe = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
         if (exe is not null) System.Diagnostics.Process.Start(exe);

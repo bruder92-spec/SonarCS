@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 
 namespace VoiceTyper;
@@ -32,14 +32,22 @@ public sealed class KeyboardHook : IDisposable
         _vk   = vkCode;
         _proc = Callback;
 
+        Exception? threadEx = null;
         var ready = new ManualResetEventSlim();
         var thread = new Thread(() =>
         {
-            _win32ThreadId = GetCurrentThreadId();
+            try
+            {
+                _win32ThreadId = GetCurrentThreadId();
+                // Для WH_KEYBOARD_LL параметр hModule игнорируется Windows — передаём IntPtr.Zero.
+                _hook = SetWindowsHookEx(WH_KEYBOARD_LL, _proc, IntPtr.Zero, 0);
+                if (_hook == IntPtr.Zero)
+                    threadEx = new Win32Exception(Marshal.GetLastWin32Error(), "Не удалось установить хук клавиатуры");
+            }
+            catch (Exception ex) { threadEx = ex; }
+            finally { ready.Set(); }
 
-            using var mod = Process.GetCurrentProcess().MainModule!;
-            _hook = SetWindowsHookEx(WH_KEYBOARD_LL, _proc, GetModuleHandle(mod.ModuleName!), 0);
-            ready.Set();
+            if (threadEx is not null) return;
 
             // Собственный message loop — без него коллбэк не вызывается
             while (GetMessage(out var msg, IntPtr.Zero, 0, 0) > 0)
@@ -52,7 +60,8 @@ public sealed class KeyboardHook : IDisposable
         })
         { IsBackground = true };
         thread.Start();
-        ready.Wait();   // ждём, пока хук установлен
+        ready.Wait();   // ждём, пока хук установлен (или упал)
+        if (threadEx is not null) throw threadEx;
     }
 
     private IntPtr Callback(int code, IntPtr wParam, IntPtr lParam)
@@ -95,7 +104,7 @@ public sealed class KeyboardHook : IDisposable
         public int     ptX, ptY;
     }
 
-    [DllImport("user32.dll")]   static extern IntPtr SetWindowsHookEx(int id, LowLevelKeyboardProc fn, IntPtr hmod, uint tid);
+    [DllImport("user32.dll", SetLastError = true)] static extern IntPtr SetWindowsHookEx(int id, LowLevelKeyboardProc fn, IntPtr hmod, uint tid);
     [DllImport("user32.dll")]   static extern bool   UnhookWindowsHookEx(IntPtr h);
     [DllImport("user32.dll")]   static extern IntPtr CallNextHookEx(IntPtr h, int code, IntPtr wp, IntPtr lp);
     [DllImport("user32.dll")]   static extern int    GetMessage(out MSG msg, IntPtr hwnd, uint min, uint max);

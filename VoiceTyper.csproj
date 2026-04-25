@@ -20,4 +20,12 @@
     <PackageReference Include="Whisper.net.Runtime.Vulkan"  Version="1.9.0"  />
   </ItemGroup>
 
+  <!-- VC++ runtime DLLs, required by whisper.dll (MSVC-compiled). -->
+  <!-- Pre-installed on most Windows 10/11 systems, but included here for guaranteed offline portability. -->
+  <ItemGroup>
+    <None Include="vcredist\vcruntime140.dll"   CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+    <None Include="vcredist\vcruntime140_1.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+    <None Include="vcredist\MSVCP140.dll"       CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+  </ItemGroup>
+
 </Project>

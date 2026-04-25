@@ -20,10 +20,8 @@ public sealed class WhisperEngine : IDisposable
 
     public void Load()
     {
-        IsGpu = IsVulkanAvailable();
-        Logger.Info($"WhisperEngine: загрузка модели, GPU(Vulkan)={IsGpu}, путь={_modelPath}");
+        IsGpu    = IsVulkanAvailable();
         _factory = WhisperFactory.FromPath(_modelPath);
-        Logger.Info("WhisperEngine: модель загружена");
     }
 
     /// <summary>Распознаёт PCM-аудио. Вызывается через await из RecognizeAsync.</summary>
@@ -42,9 +40,7 @@ public sealed class WhisperEngine : IDisposable
         await foreach (var seg in proc.ProcessAsync(wav))
             sb.Append(seg.Text);
 
-        var result = sb.ToString().Trim();
-        Logger.Info($"WhisperEngine: распознано «{result}»");
-        return result;
+        return sb.ToString().Trim();
     }
 
     /// <summary>
@@ -90,9 +86,5 @@ public sealed class WhisperEngine : IDisposable
         return ms;
     }
 
-    public void Dispose()
-    {
-        _factory?.Dispose();
-        Logger.Info("WhisperEngine: выгружен");
-    }
+    public void Dispose() => _factory?.Dispose();
 }

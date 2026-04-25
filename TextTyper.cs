@@ -6,13 +6,12 @@ namespace VoiceTyper;
 /// Вставляет текст в активное окно через буфер обмена + Ctrl+V.
 ///
 /// Алгоритм:
-///   1. Сохраняем старое содержимое буфера обмена
+///   1. Сохраняем полный IDataObject из буфера обмена (текст, картинки, файлы — всё)
 ///   2. Копируем текст в буфер
 ///   3. Симулируем Ctrl+V через keybd_event
-///   4. Восстанавливаем буфер обмена
+///   4. Восстанавливаем сохранённый буфер обмена
 ///
 /// Clipboard.* требует STA-поток — создаём явно.
-/// keybd_event проще SendInput и работает из любого потока.
 /// </summary>
 public static class TextTyper
 {
@@ -27,10 +26,12 @@ public static class TextTyper
     {
         var sta = new Thread(() =>
         {
-            string? prev = null;
+            IDataObject? prev = null;
             try
             {
-                if (Clipboard.ContainsText()) prev = Clipboard.GetText();
+                // Сохраняем всё содержимое буфера (текст, картинки, файлы)
+                try { prev = Clipboard.GetDataObject(); } catch { }
+
                 Clipboard.SetText(text);
                 Thread.Sleep(80);
 
@@ -40,16 +41,17 @@ public static class TextTyper
                 keybd_event(VK_V,       0, KEYEVENTF_UP, UIntPtr.Zero);
                 keybd_event(VK_CONTROL, 0, KEYEVENTF_UP, UIntPtr.Zero);
 
-                Thread.Sleep(150);
+                Thread.Sleep(200);
             }
             finally
             {
+                // Восстанавливаем буфер обмена в исходное состояние
                 try
                 {
-                    if (prev is not null) Clipboard.SetText(prev);
+                    if (prev is not null) Clipboard.SetDataObject(prev, copy: true);
                     else                 Clipboard.Clear();
                 }
-                catch { /* игнорируем если не получилось восстановить */ }
+                catch { }
             }
         });
 

@@ -163,7 +163,7 @@ public sealed class FirstRunForm : Form
         _rbWhisper.Enabled = whisperOk;
         if (!whisperOk)
         {
-            _lblWhisperInfo.Text      = "  ⚠  Файл «ggml-medium.bin» не найден рядом с VoiceTyper.exe";
+            _lblWhisperInfo.Text      = "  ⚠  Файл «ggml-small.bin» не найден рядом с VoiceTyper.exe";
             _lblWhisperInfo.ForeColor = Color.Red;
         }
 

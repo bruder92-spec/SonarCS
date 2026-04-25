@@ -40,7 +40,11 @@ public sealed class AppConfig
 
     public void Save()
     {
-        File.WriteAllText(ConfigPath,
-            JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
+        try
+        {
+            File.WriteAllText(ConfigPath,
+                JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        catch { /* нет прав на запись — настройки не сохраняются, но работа продолжается */ }
     }
 }

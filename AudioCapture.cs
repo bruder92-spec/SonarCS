@@ -24,12 +24,11 @@ public sealed class AudioCapture : IDisposable
     {
         lock (_lock) { _chunks.Clear(); _active = true; }
 
-        // DeviceNumber -1 → WaveInEvent интерпретирует как 0 (первое устройство),
-        // что на WinMM соответствует WAVE_MAPPER (системный по умолчанию).
-        // Для явного WAVE_MAPPER передаём 0 через WaveInterop — NAudio принимает -1 корректно.
+        // DeviceNumber -1 = WAVE_MAPPER (WinMM -1 as UINT = 0xFFFFFFFF).
+        // NAudio передаёт значение напрямую в waveInOpen — -1 корректно интерпретируется как системный по умолчанию.
         _waveIn = new WaveInEvent
         {
-            DeviceNumber       = DeviceNumber < 0 ? 0 : DeviceNumber,
+            DeviceNumber       = DeviceNumber < 0 ? -1 : DeviceNumber,
             WaveFormat         = new WaveFormat(_rate, 16, 1),
             BufferMilliseconds = 100,
         };
