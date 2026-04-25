@@ -5,11 +5,14 @@ using NAudio.Wave;
 namespace VoiceTyper;
 
 /// <summary>
-/// Основной контекст приложения.
+/// Основной контекст приложения v2.
 ///
-/// Поведение при запуске:
-///   1. Если config.json не найден → показывает FirstRunForm (выбор движка + микрофона)
-///   2. Загружает выбранный движок, запускает захват аудио и хук клавиатуры
+/// Новое в v2:
+///   - горячая клавиша берётся из config.json (HotkeyVk)
+///   - окно настроек (SettingsForm) вместо сброса через меню
+///   - постобработка текста (PostProcess)
+///   - логирование в VoiceTyper.log (ротация по 1 МБ)
+///   - GPU-статус Whisper (Vulkan) отображается в тултипе
 ///
 /// Цвета иконки:
 ///   Синий  (#1E78FF) — готов
@@ -20,28 +23,27 @@ namespace VoiceTyper;
 /// </summary>
 public sealed class TrayApp : ApplicationContext
 {
-    // ── цвета иконки ──────────────────────────────────────────────────────────
     private static readonly Color CLR_LOADING     = Color.Gray;
-    private static readonly Color CLR_READY       = Color.FromArgb(30,  120, 255);   // синий
-    private static readonly Color CLR_RECORDING   = Color.FromArgb(220,  40,  40);   // красный
-    private static readonly Color CLR_RECOGNIZING = Color.FromArgb(220, 120,   0);   // оранжевый
-    private static readonly Color CLR_ERROR       = Color.FromArgb(180,   0, 180);   // фиолет
+    private static readonly Color CLR_READY       = Color.FromArgb(30,  120, 255);
+    private static readonly Color CLR_RECORDING   = Color.FromArgb(220,  40,  40);
+    private static readonly Color CLR_RECOGNIZING = Color.FromArgb(220, 120,   0);
+    private static readonly Color CLR_ERROR       = Color.FromArgb(180,   0, 180);
 
-    // ── поля ──────────────────────────────────────────────────────────────────
     private readonly NotifyIcon _tray;
-    private AppConfig?    _config;
-    private VoskEngine?   _vosk;
+    private AppConfig?     _config;
+    private VoskEngine?    _vosk;
     private WhisperEngine? _whisper;
-    private AudioCapture? _audio;
-    private KeyboardHook? _hook;
+    private AudioCapture?  _audio;
+    private KeyboardHook?  _hook;
 
     private enum State { Loading, Ready, Recording, Recognizing, Error }
     private volatile State _state = State.Loading;
     private readonly object _lock = new();
 
-    // ── конструктор ───────────────────────────────────────────────────────────
     public TrayApp()
     {
+        Logger.Info("── VoiceTyper запуск ──────────────────────────────────");
+
         _tray = new NotifyIcon
         {
             Visible          = true,
@@ -58,7 +60,6 @@ public sealed class TrayApp : ApplicationContext
     {
         try
         {
-            // Первый запуск — показываем диалог выбора
             _config = AppConfig.TryLoad();
             if (_config is null)
             {
@@ -67,13 +68,15 @@ public sealed class TrayApp : ApplicationContext
                 _config.Save();
             }
 
+            Logger.Info($"Конфиг: engine={_config.Engine}, mic={_config.MicrophoneDevice}, " +
+                        $"hotkey=0x{_config.HotkeyVk:X2}, postProcess={_config.PostProcess}");
+
             SetState(State.Loading, "Загрузка модели…");
 
-            // Загружаем выбранный движок
             if (_config.Engine == "whisper")
             {
                 if (!File.Exists(AppConfig.WhisperModel))
-                    throw new FileNotFoundException("ggml-medium.bin не найден", AppConfig.WhisperModel);
+                    throw new FileNotFoundException("ggml-small.bin не найден", AppConfig.WhisperModel);
                 _whisper = new WhisperEngine(AppConfig.WhisperModel);
                 await Task.Run(_whisper.Load);
             }
@@ -85,33 +88,42 @@ public sealed class TrayApp : ApplicationContext
                 await Task.Run(_vosk.Load);
             }
 
-            // Аудио
             _audio = new AudioCapture(sampleRate: 16_000)
             {
                 DeviceNumber = _config.MicrophoneDevice,
             };
 
-            // Хук клавиатуры (Left Alt, VK_LMENU = 0xA4)
-            _hook           =  new KeyboardHook(vkCode: 0xA4);
+            _hook          = new KeyboardHook(vkCode: _config.HotkeyVk);
             _hook.Pressed  += OnKeyDown;
             _hook.Released += OnKeyUp;
 
-            // Обновляем меню с реальными данными
-            string engineLabel = _config.Engine == "whisper" ? "Whisper Small" : "VOSK";
+            string engineLabel = GetEngineLabel();
             string micLabel    = GetMicName(_config.MicrophoneDevice);
             _tray.ContextMenuStrip = BuildMenu(engineLabel, micLabel);
 
             SetState(State.Ready, $"Готов  [{engineLabel}]  [{micLabel}]");
+            Logger.Info($"Готов. Клавиша: {SettingsForm.VkName(_config.HotkeyVk)}");
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[init] {ex}");
-            SetState(State.Error, "Ошибка инициализации — см. консоль");
+            Logger.Error("Ошибка инициализации", ex);
+            SetState(State.Error, "Ошибка инициализации — см. VoiceTyper.log");
             MessageBox.Show(ex.Message, "Voice Typer — Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
-    // ── диалог первого запуска (должен быть на STA-потоке) ───────────────────
+    // ── метка движка ──────────────────────────────────────────────────────────
+    private string GetEngineLabel()
+    {
+        if (_config?.Engine == "whisper")
+        {
+            string gpu = (_whisper?.IsGpu == true) ? " [GPU]" : " [CPU]";
+            return "Whisper Small" + gpu;
+        }
+        return "VOSK";
+    }
+
+    // ── диалог первого запуска ────────────────────────────────────────────────
     private Task<AppConfig?> ShowFirstRunDialogAsync()
     {
         var tcs = new TaskCompletionSource<AppConfig?>();
@@ -120,17 +132,13 @@ public sealed class TrayApp : ApplicationContext
             Application.EnableVisualStyles();
             using var form = new FirstRunForm();
             if (form.ShowDialog() == DialogResult.OK)
-            {
                 tcs.SetResult(new AppConfig
                 {
-                    Engine          = form.SelectedEngine,
+                    Engine           = form.SelectedEngine,
                     MicrophoneDevice = form.SelectedMicDevice,
                 });
-            }
             else
-            {
                 tcs.SetResult(null);
-            }
         });
         sta.SetApartmentState(ApartmentState.STA);
         sta.IsBackground = true;
@@ -138,7 +146,7 @@ public sealed class TrayApp : ApplicationContext
         return tcs.Task;
     }
 
-    // ── иконка ────────────────────────────────────────────────────────────────
+    // ── иконка / состояние ────────────────────────────────────────────────────
     private void SetState(State s, string? tip = null)
     {
         _state = s;
@@ -177,24 +185,20 @@ public sealed class TrayApp : ApplicationContext
         finally { DestroyIcon(h); }
     }
 
-    // ── меню ──────────────────────────────────────────────────────────────────
+    // ── меню трея ─────────────────────────────────────────────────────────────
     private ContextMenuStrip BuildMenu(string engineLabel, string micLabel)
     {
         var menu = new ContextMenuStrip();
 
-        // Заголовок
         menu.Items.Add($"Voice Typer  [{engineLabel}]").Enabled = false;
         menu.Items.Add(new ToolStripSeparator());
 
-        // Подменю микрофонов
         var micItem = new ToolStripMenuItem($"Микрофон: {micLabel}");
         BuildMicSubmenu(micItem);
         menu.Items.Add(micItem);
 
         menu.Items.Add(new ToolStripSeparator());
-
-        // Сменить настройки
-        menu.Items.Add("Сменить движок / микрофон…", null, (_, _) => ResetConfig());
+        menu.Items.Add("Настройки…", null, (_, _) => OpenSettings());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Выйти", null, (_, _) => Shutdown());
 
@@ -205,16 +209,14 @@ public sealed class TrayApp : ApplicationContext
     {
         int current = _config?.MicrophoneDevice ?? -1;
 
-        // «По умолчанию»
         var def = new ToolStripMenuItem("Системный по умолчанию") { Checked = current < 0 };
         def.Click += (_, _) => SelectMic(-1);
         parent.DropDownItems.Add(def);
         parent.DropDownItems.Add(new ToolStripSeparator());
 
-        // Все доступные устройства
         foreach (var (idx, name) in AudioCapture.GetDevices())
         {
-            var i = idx;    // захват в замыкании
+            var i    = idx;
             var item = new ToolStripMenuItem(name) { Checked = current == i };
             item.Click += (_, _) => SelectMic(i);
             parent.DropDownItems.Add(item);
@@ -227,17 +229,32 @@ public sealed class TrayApp : ApplicationContext
         _config.MicrophoneDevice = deviceIndex;
         _config.Save();
         _audio.DeviceNumber = deviceIndex;
+        Logger.Info($"Микрофон изменён на {deviceIndex}");
 
         string micLabel = GetMicName(deviceIndex);
-        string engLabel = _config.Engine == "whisper" ? "Whisper Small" : "VOSK";
-        _tray.ContextMenuStrip = BuildMenu(engLabel, micLabel);
+        _tray.ContextMenuStrip = BuildMenu(GetEngineLabel(), micLabel);
     }
 
     private static string GetMicName(int device)
     {
         if (device < 0) return "По умолчанию";
-        var devs = AudioCapture.GetDevices();
-        return devs.FirstOrDefault(d => d.Index == device).Name ?? $"Устройство {device}";
+        return AudioCapture.GetDevices().FirstOrDefault(d => d.Index == device).Name
+               ?? $"Устройство {device}";
+    }
+
+    // ── окно настроек ─────────────────────────────────────────────────────────
+    private void OpenSettings()
+    {
+        if (_config is null) return;
+        var sta = new Thread(() =>
+        {
+            Application.EnableVisualStyles();
+            using var form = new SettingsForm(_config);
+            form.ShowDialog();
+        });
+        sta.SetApartmentState(ApartmentState.STA);
+        sta.IsBackground = true;
+        sta.Start();
     }
 
     // ── обработка клавиши ─────────────────────────────────────────────────────
@@ -250,6 +267,7 @@ public sealed class TrayApp : ApplicationContext
         }
         _audio!.StartRecording();
         SetState(State.Recording, "Запись…");
+        Logger.Info("Запись начата");
     }
 
     private void OnKeyUp()
@@ -262,31 +280,43 @@ public sealed class TrayApp : ApplicationContext
             pcm = _audio!.StopRecording();
         }
         SetState(State.Recognizing, "Распознавание…");
+        Logger.Info($"Запись остановлена, PCM байт: {pcm.Length}");
         _ = RecognizeAsync(pcm);
     }
 
     private async Task RecognizeAsync(byte[] pcm)
     {
-        string engLabel = _config?.Engine == "whisper" ? "Whisper Small" : "VOSK";
+        string engLabel = GetEngineLabel();
         try
         {
             if (pcm.Length > 0)
             {
                 string text = _config?.Engine == "whisper"
-                    ? await _whisper!.TranscribeAsync(pcm)           // async Whisper.net API
-                    : await Task.Run(() => _vosk!.Transcribe(pcm));  // sync Vosk в пуле
+                    ? await _whisper!.TranscribeAsync(pcm)
+                    : await Task.Run(() => _vosk!.Transcribe(pcm));
 
                 if (!string.IsNullOrWhiteSpace(text))
                 {
+                    if (_config?.PostProcess == true)
+                        text = TextProcessor.Process(text);
+
+                    Logger.Info($"[{engLabel}] Вставка: «{text}»");
                     Console.WriteLine($"[{engLabel}] {text}");
                     TextTyper.Type(text + " ");
                 }
+                else
+                {
+                    Logger.Info($"[{engLabel}] Пустой результат");
+                }
+            }
+            else
+            {
+                Logger.Warn("PCM пустой — запись слишком короткая?");
             }
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[recognition] {ex}");
-            // Показываем ошибку пользователю как balloon-подсказку
+            Logger.Error("Ошибка распознавания", ex);
             _tray.BalloonTipTitle = "Voice Typer — Ошибка";
             _tray.BalloonTipText  = ex.Message;
             _tray.BalloonTipIcon  = ToolTipIcon.Error;
@@ -298,22 +328,10 @@ public sealed class TrayApp : ApplicationContext
         }
     }
 
-    // ── сброс настроек ────────────────────────────────────────────────────────
-    private void ResetConfig()
-    {
-        var cfgPath = Path.Combine(AppContext.BaseDirectory, "config.json");
-        if (File.Exists(cfgPath)) File.Delete(cfgPath);
-
-        // Перезапустить процесс
-        var exe = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
-        if (exe is not null)
-            System.Diagnostics.Process.Start(exe);
-        Shutdown();
-    }
-
     // ── завершение ────────────────────────────────────────────────────────────
     private void Shutdown()
     {
+        Logger.Info("Завершение работы");
         _hook?.Dispose();
         _audio?.Dispose();
         _whisper?.Dispose();
