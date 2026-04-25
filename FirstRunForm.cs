@@ -4,7 +4,7 @@ namespace VoiceTyper;
 
 /// <summary>
 /// Диалог первого запуска:
-///   - выбор движка (VOSK / Whisper Medium)
+///   - выбор движка (VOSK / Whisper / GigaAM v2)
 ///   - выбор микрофона из всех доступных устройств
 ///
 /// Движок отображается недоступным (серым), если его файл модели не найден.
@@ -17,8 +17,10 @@ public sealed class FirstRunForm : Form
 
     // ── контролы ──────────────────────────────────────────────────────────────
     private readonly RadioButton _rbVosk;
+    private readonly RadioButton _rbSherpa;
     private readonly RadioButton _rbWhisper;
     private readonly Label       _lblVoskInfo;
+    private readonly Label       _lblSherpaInfo;
     private readonly Label       _lblWhisperInfo;
     private readonly ComboBox    _cbMic;
     private readonly Button      _btnOk;
@@ -27,7 +29,7 @@ public sealed class FirstRunForm : Form
     {
         // ── окно ──────────────────────────────────────────────────────────────
         Text            = "Voice Typer — Первый запуск";
-        ClientSize      = new Size(480, 370);
+        ClientSize      = new Size(480, 440);
         StartPosition   = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox     = false;
@@ -49,7 +51,7 @@ public sealed class FirstRunForm : Form
         // ── VOSK ──────────────────────────────────────────────────────────────
         _rbVosk = Add(new RadioButton
         {
-            Text     = "VOSK  —  быстрый",
+            Text     = "VOSK  —  быстрый, русский",
             Font     = new Font("Segoe UI", 10, FontStyle.Bold),
             Location = new Point(m, y),
             Size     = new Size(440, 24),
@@ -67,10 +69,30 @@ public sealed class FirstRunForm : Form
         });
         y += 32;
 
+        // ── GigaAM v2 ─────────────────────────────────────────────────────────
+        _rbSherpa = Add(new RadioButton
+        {
+            Text     = "GigaAM v2  —  точный, русский",
+            Font     = new Font("Segoe UI", 10, FontStyle.Bold),
+            Location = new Point(m, y),
+            Size     = new Size(440, 24),
+        });
+        y += 26;
+
+        _lblSherpaInfo = Add(new Label
+        {
+            Text      = "  Размер: 226 МБ  •  Задержка: ~1.5 сек  •  Качество: отличное",
+            Font      = new Font("Segoe UI", 9),
+            ForeColor = Color.DimGray,
+            Location  = new Point(m + 18, y),
+            Size      = new Size(440, 18),
+        });
+        y += 32;
+
         // ── Whisper ───────────────────────────────────────────────────────────
         _rbWhisper = Add(new RadioButton
         {
-            Text     = "Whisper Small  —  точный",
+            Text     = "Whisper Small  —  мультиязычный",
             Font     = new Font("Segoe UI", 10, FontStyle.Bold),
             Location = new Point(m, y),
             Size     = new Size(440, 24),
@@ -151,6 +173,7 @@ public sealed class FirstRunForm : Form
     private void CheckModelAvailability()
     {
         bool voskOk    = Directory.Exists(AppConfig.VoskModelDir);
+        bool sherpaOk  = File.Exists(AppConfig.SherpaModel);
         bool whisperOk = File.Exists(AppConfig.WhisperModel);
 
         _rbVosk.Enabled = voskOk;
@@ -158,6 +181,13 @@ public sealed class FirstRunForm : Form
         {
             _lblVoskInfo.Text      = "  ⚠  Папка «model» не найдена рядом с VoiceTyper.exe";
             _lblVoskInfo.ForeColor = Color.Red;
+        }
+
+        _rbSherpa.Enabled = sherpaOk;
+        if (!sherpaOk)
+        {
+            _lblSherpaInfo.Text      = "  ⚠  Файл «giga-am-v2.onnx» не найден рядом с VoiceTyper.exe";
+            _lblSherpaInfo.ForeColor = Color.Red;
         }
 
         _rbWhisper.Enabled = whisperOk;
@@ -168,14 +198,19 @@ public sealed class FirstRunForm : Form
         }
 
         // авто-выбор первого доступного движка
-        if (!voskOk && whisperOk)  _rbWhisper.Checked = true;
-        if (!voskOk && !whisperOk) { _btnOk.Enabled = false; Text += "  [ОШИБКА: модели не найдены]"; }
+        if (!voskOk && sherpaOk)   _rbSherpa.Checked  = true;
+        if (!voskOk && !sherpaOk && whisperOk) _rbWhisper.Checked = true;
+        if (!voskOk && !sherpaOk && !whisperOk)
+        {
+            _btnOk.Enabled = false;
+            Text += "  [ОШИБКА: модели не найдены]";
+        }
     }
 
     // ── OK ────────────────────────────────────────────────────────────────────
     private void BtnOk_Click(object? sender, EventArgs e)
     {
-        SelectedEngine    = _rbWhisper.Checked ? "whisper" : "vosk";
+        SelectedEngine    = _rbWhisper.Checked ? "whisper" : _rbSherpa.Checked ? "sherpa" : "vosk";
         SelectedMicDevice = _cbMic.SelectedIndex - 1;   // 0 → -1 (default), 1 → 0, 2 → 1, …
         DialogResult      = DialogResult.OK;
     }

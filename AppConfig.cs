@@ -10,7 +10,7 @@ namespace VoiceTyper;
 public sealed class AppConfig
 {
     [JsonPropertyName("engine")]
-    public string Engine { get; set; } = "vosk";          // "vosk" | "whisper"
+    public string Engine { get; set; } = "vosk";          // "vosk" | "whisper" | "sherpa"
 
     [JsonPropertyName("microphone_device")]
     public int MicrophoneDevice { get; set; } = -1;       // -1 = системный по умолчанию
@@ -24,6 +24,8 @@ public sealed class AppConfig
     // ── пути к файлам моделей (относительно exe) ──────────────────────────────
     public static string VoskModelDir   => Path.Combine(AppContext.BaseDirectory, "model");
     public static string WhisperModel   => Path.Combine(AppContext.BaseDirectory, "ggml-small.bin");
+    public static string SherpaModel    => Path.Combine(AppContext.BaseDirectory, "giga-am-v2.onnx");
+    public static string SherpaTokens   => Path.Combine(AppContext.BaseDirectory, "giga-am-tokens.txt");
 
     // ── загрузка / сохранение ─────────────────────────────────────────────────
     private static string ConfigPath => Path.Combine(AppContext.BaseDirectory, "config.json");

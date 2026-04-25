@@ -14,6 +14,7 @@ public sealed class SettingsForm : Form
 
     private readonly RadioButton _rbVosk;
     private readonly RadioButton _rbWhisper;
+    private readonly RadioButton _rbSherpa;
     private readonly Label       _lblGpu;
     private readonly ComboBox    _cbMic;
     private readonly Button      _btnHotkey;
@@ -30,7 +31,7 @@ public sealed class SettingsForm : Form
         _capturedVk = cfg.HotkeyVk;
 
         Text            = "Voice Typer — Настройки";
-        ClientSize      = new Size(460, 570);
+        ClientSize      = new Size(460, 590);
         StartPosition   = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox     = false;
@@ -45,9 +46,10 @@ public sealed class SettingsForm : Form
 
         _rbVosk = Add(new RadioButton
         {
-            Text     = "VOSK  —  быстрый (88 МБ)",
+            Text     = "VOSK  —  быстрый, русский (88 МБ)",
             Font     = new Font("Segoe UI", 10),
             Checked  = cfg.Engine == "vosk",
+            Enabled  = Directory.Exists(AppConfig.VoskModelDir),
             Location = new Point(m, y),
             Size     = new Size(420, 22),
         });
@@ -55,9 +57,10 @@ public sealed class SettingsForm : Form
 
         _rbWhisper = Add(new RadioButton
         {
-            Text     = "Whisper Small  —  точный (466 МБ)",
+            Text     = "Whisper  —  мультиязычный (466 МБ)",
             Font     = new Font("Segoe UI", 10),
             Checked  = cfg.Engine == "whisper",
+            Enabled  = File.Exists(AppConfig.WhisperModel),
             Location = new Point(m, y),
             Size     = new Size(420, 22),
         });
@@ -73,7 +76,18 @@ public sealed class SettingsForm : Form
             Location  = new Point(m + 18, y),
             Size      = new Size(420, 18),
         });
-        y += 30;
+        y += 22;
+
+        _rbSherpa = Add(new RadioButton
+        {
+            Text     = "GigaAM v2  —  точный, русский (226 МБ)",
+            Font     = new Font("Segoe UI", 10),
+            Checked  = cfg.Engine == "sherpa",
+            Enabled  = File.Exists(AppConfig.SherpaModel),
+            Location = new Point(m, y),
+            Size     = new Size(420, 22),
+        });
+        y += 26;
 
         Add(Separator(ref y));
 
@@ -250,7 +264,7 @@ public sealed class SettingsForm : Form
     // ── Применить ─────────────────────────────────────────────────────────────
     private void BtnApply_Click(object? sender, EventArgs e)
     {
-        _cfg.Engine          = _rbWhisper.Checked ? "whisper" : "vosk";
+        _cfg.Engine          = _rbWhisper.Checked ? "whisper" : _rbSherpa.Checked ? "sherpa" : "vosk";
         _cfg.MicrophoneDevice = _cbMic.SelectedIndex - 1;
         _cfg.HotkeyVk        = _capturedVk;
         _cfg.PostProcess     = _chkPost.Checked;

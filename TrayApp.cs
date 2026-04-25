@@ -26,6 +26,7 @@ public sealed class TrayApp : ApplicationContext
     private AppConfig?     _config;
     private VoskEngine?    _vosk;
     private WhisperEngine? _whisper;
+    private SherpaEngine?  _sherpa;
     private AudioCapture?  _audio;
     private KeyboardHook?  _hook;
     private bool           _settingsOpen;
@@ -69,6 +70,13 @@ public sealed class TrayApp : ApplicationContext
                 _whisper = new WhisperEngine(AppConfig.WhisperModel);
                 await Task.Run(_whisper.Load);
             }
+            else if (_config.Engine == "sherpa")
+            {
+                if (!File.Exists(AppConfig.SherpaModel))
+                    throw new FileNotFoundException("giga-am-v2.onnx не найден", AppConfig.SherpaModel);
+                _sherpa = new SherpaEngine(AppConfig.SherpaModel, AppConfig.SherpaTokens);
+                await Task.Run(_sherpa.Load);
+            }
             else
             {
                 if (!Directory.Exists(AppConfig.VoskModelDir))
@@ -101,12 +109,12 @@ public sealed class TrayApp : ApplicationContext
     }
 
     // ── метка движка ──────────────────────────────────────────────────────────
-    private string GetEngineLabel()
+    private string GetEngineLabel() => _config?.Engine switch
     {
-        if (_config?.Engine == "whisper")
-            return "Whisper Small" + (_whisper?.IsGpu == true ? " [GPU]" : " [CPU]");
-        return "VOSK";
-    }
+        "whisper" => "Whisper Small" + (_whisper?.IsGpu == true ? " [GPU]" : " [CPU]"),
+        "sherpa"  => "GigaAM v2",
+        _         => "VOSK",
+    };
 
     // ── диалог первого запуска ────────────────────────────────────────────────
     private Task<AppConfig?> ShowFirstRunDialogAsync()
@@ -287,9 +295,12 @@ public sealed class TrayApp : ApplicationContext
         {
             if (pcm.Length > 0)
             {
-                string text = _config?.Engine == "whisper"
-                    ? await _whisper!.TranscribeAsync(pcm)
-                    : await Task.Run(() => _vosk!.Transcribe(pcm));
+                string text = _config?.Engine switch
+                {
+                    "whisper" => await _whisper!.TranscribeAsync(pcm),
+                    "sherpa"  => await Task.Run(() => _sherpa!.Transcribe(pcm)),
+                    _         => await Task.Run(() => _vosk!.Transcribe(pcm)),
+                };
 
                 if (!string.IsNullOrWhiteSpace(text))
                 {
@@ -321,6 +332,7 @@ public sealed class TrayApp : ApplicationContext
         _hook?.Dispose();
         _audio?.Dispose();
         _whisper?.Dispose();
+        _sherpa?.Dispose();
         _tray.Visible = false;
         _tray.Dispose();
         Application.Exit();
