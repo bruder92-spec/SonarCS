@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>VoiceTyper</AssemblyName>
+    <RootNamespace>VoiceTyper</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NAudio"              Version="2.2.1"  />
+    <PackageReference Include="Vosk"                Version="0.3.38" />
+    <PackageReference Include="Whisper.net"         Version="1.5.0"  />
+    <PackageReference Include="Whisper.net.Runtime" Version="1.5.0"  />
+  </ItemGroup>
+
+  <!-- Копируем whisper.dll (нативная whisper.cpp) в выходную папку -->
+  <ItemGroup>
+    <None Include="$(NuGetPackageRoot)whisper.net.runtime\1.5.0\build\win-x64\whisper.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>whisper.dll</Link>
+    </None>
+  </ItemGroup>
+
+</Project>
