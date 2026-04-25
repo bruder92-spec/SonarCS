@@ -20,6 +20,7 @@ public sealed class SettingsForm : Form
     private readonly Button      _btnHotkey;
     private readonly Label       _lblHotkeyHint;
     private readonly CheckBox    _chkPost;
+    private readonly CheckBox    _chkPunct;
     private readonly CheckBox    _chkAutoStart;
 
     private bool _capturing;
@@ -31,7 +32,7 @@ public sealed class SettingsForm : Form
         _capturedVk = cfg.HotkeyVk;
 
         Text            = "Voice Typer — Настройки";
-        ClientSize      = new Size(460, 590);
+        ClientSize      = new Size(460, 618);
         StartPosition   = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox     = false;
@@ -163,7 +164,29 @@ public sealed class SettingsForm : Form
             Location  = new Point(m + 18, y),
             Size      = new Size(420, 18),
         });
-        y += 36;
+        y += 28;
+
+        bool punctAvail = PunctuationEngine.IsAvailable;
+        _chkPunct = Add(new CheckBox
+        {
+            Text     = "Пунктуация Silero TE" + (punctAvail ? "" : "  [модель silero_te.onnx не найдена]"),
+            Font     = new Font("Segoe UI", 10),
+            Checked  = cfg.UsePunctuation && punctAvail,
+            Enabled  = punctAvail,
+            Location = new Point(m, y),
+            Size     = new Size(420, 22),
+        });
+        y += 26;
+
+        Add(new Label
+        {
+            Text      = "  Применяется к VOSK и GigaAM (Whisper уже имеет пунктуацию)",
+            Font      = new Font("Segoe UI", 9),
+            ForeColor = punctAvail ? Color.DimGray : Color.FromArgb(180, 60, 60),
+            Location  = new Point(m + 18, y),
+            Size      = new Size(420, 18),
+        });
+        y += 22;
 
         Add(Separator(ref y));
 
@@ -268,6 +291,7 @@ public sealed class SettingsForm : Form
         _cfg.MicrophoneDevice = _cbMic.SelectedIndex - 1;
         _cfg.HotkeyVk        = _capturedVk;
         _cfg.PostProcess     = _chkPost.Checked;
+        _cfg.UsePunctuation  = _chkPunct.Checked;
         _cfg.Save();
 
         if (_chkAutoStart.Checked) AutoStartManager.Enable();

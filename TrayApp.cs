@@ -23,13 +23,21 @@ public sealed class TrayApp : ApplicationContext
     private static readonly Color CLR_ERROR       = Color.FromArgb(180,   0, 180);
 
     private readonly NotifyIcon _tray;
-    private AppConfig?     _config;
-    private VoskEngine?    _vosk;
-    private WhisperEngine? _whisper;
-    private SherpaEngine?  _sherpa;
-    private AudioCapture?  _audio;
-    private KeyboardHook?  _hook;
-    private bool           _settingsOpen;
+    private AppConfig?         _config;
+    private VoskEngine?        _vosk;
+    private WhisperEngine?     _whisper;
+    private SherpaEngine?      _sherpa;
+    private AudioCapture?      _audio;
+    private KeyboardHook?      _hook;
+    private bool               _settingsOpen;
+
+    // ── очередь фраз ──────────────────────────────────────────────────────────
+    private byte[]? _pendingPcm;        // PCM следующей фразы, ждёт завершения текущего распознавания
+    private bool    _capturingForQueue; // идёт запись «в очередь» пока Recognizing
+
+    // ── v4: пунктуация и оверлей ──────────────────────────────────────────────
+    private PunctuationEngine? _punct;
+    private OverlayForm?       _overlay;
 
     private enum State { Loading, Ready, Recording, Recognizing, Error }
     private volatile State _state = State.Loading;
@@ -46,6 +54,9 @@ public sealed class TrayApp : ApplicationContext
         };
 
         _ = Task.Run(StartupAsync);
+
+        _overlay = new OverlayForm();
+        _ = _overlay.Handle; // принудительно создаём HWND на STA-потоке
     }
 
     // ── запуск ────────────────────────────────────────────────────────────────
@@ -93,6 +104,9 @@ public sealed class TrayApp : ApplicationContext
             _hook          = new KeyboardHook(vkCode: _config.HotkeyVk);
             _hook.Pressed  += OnKeyDown;
             _hook.Released += OnKeyUp;
+
+            if (_config.UsePunctuation && PunctuationEngine.IsAvailable)
+                _punct = new PunctuationEngine();
 
             string engineLabel = GetEngineLabel();
             string micLabel    = GetMicName(_config.MicrophoneDevice);
@@ -159,6 +173,21 @@ public sealed class TrayApp : ApplicationContext
             _tray.Text = text.Length > 63 ? text[..63] : text;
         }
         old?.Dispose();
+        UpdateOverlay(s);
+    }
+
+    private void UpdateOverlay(State s)
+    {
+        if (_overlay is null || !_overlay.IsHandleCreated) return;
+        _overlay.BeginInvoke(() =>
+        {
+            switch (s)
+            {
+                case State.Recording:   _overlay.ShowRecording();   break;
+                case State.Recognizing: _overlay.ShowRecognizing(); break;
+                default:                _overlay.HideOverlay();     break;
+            }
+        });
     }
 
     [DllImport("user32.dll")] static extern bool DestroyIcon(IntPtr h);
@@ -252,40 +281,70 @@ public sealed class TrayApp : ApplicationContext
     // ── обработка клавиши ─────────────────────────────────────────────────────
     private void OnKeyDown()
     {
+        bool normalRec, queuedRec;
         lock (_lock)
         {
-            if (_state != State.Ready) return;
-            _state = State.Recording;
+            normalRec = _state == State.Ready;
+            // начать запись «в очередь»: идёт распознавание, очередь пуста, запись не ведётся
+            queuedRec = _state == State.Recognizing && !_capturingForQueue && _pendingPcm is null;
+            if (!normalRec && !queuedRec) return;
+            if (normalRec) _state = State.Recording;
+            else           _capturingForQueue = true;
         }
         try
         {
             _audio!.StartRecording();
-            SetState(State.Recording, "Запись…");
+            if (normalRec) SetState(State.Recording, "Запись…");
         }
         catch (Exception ex)
         {
-            lock (_lock) { _state = State.Ready; }
-            SetState(State.Error, "Ошибка микрофона");
-            _tray.BalloonTipTitle = "Voice Typer — Ошибка микрофона";
-            _tray.BalloonTipText  = ex.Message;
-            _tray.BalloonTipIcon  = ToolTipIcon.Error;
-            _tray.ShowBalloonTip(4000);
-            // через 4 сек возвращаемся в Ready
-            _ = Task.Delay(4000).ContinueWith(_ => SetState(State.Ready, "Готов  [" + GetEngineLabel() + "]"));
+            lock (_lock)
+            {
+                if (normalRec) _state = State.Ready;
+                else           _capturingForQueue = false;
+            }
+            if (normalRec)
+            {
+                SetState(State.Error, "Ошибка микрофона");
+                _tray.BalloonTipTitle = "Voice Typer — Ошибка микрофона";
+                _tray.BalloonTipText  = ex.Message;
+                _tray.BalloonTipIcon  = ToolTipIcon.Error;
+                _tray.ShowBalloonTip(4000);
+                _ = Task.Delay(4000).ContinueWith(_ => SetState(State.Ready, "Готов  [" + GetEngineLabel() + "]"));
+            }
         }
     }
 
     private void OnKeyUp()
     {
-        byte[] pcm;
+        byte[]? launchPcm = null;
         lock (_lock)
         {
-            if (_state != State.Recording) return;
-            _state = State.Recognizing;
-            pcm = _audio!.StopRecording();
+            if (_state == State.Recording)
+            {
+                _state    = State.Recognizing;
+                launchPcm = _audio!.StopRecording();
+            }
+            else if (_capturingForQueue)
+            {
+                _capturingForQueue = false;
+                var queued = _audio!.StopRecording();
+                if (_state == State.Recognizing)
+                    _pendingPcm = queued; // распознавание ещё идёт — отложить
+                else
+                {
+                    // распознавание уже завершилось (state == Recording, выставленный в RecognizeAsync finally)
+                    _state    = State.Recognizing;
+                    launchPcm = queued;
+                }
+            }
+            else return;
         }
-        SetState(State.Recognizing, "Распознавание…");
-        _ = RecognizeAsync(pcm);
+        if (launchPcm is not null)
+        {
+            SetState(State.Recognizing, "Распознавание…");
+            _ = RecognizeAsync(launchPcm);
+        }
     }
 
     private async Task RecognizeAsync(byte[] pcm)
@@ -301,6 +360,10 @@ public sealed class TrayApp : ApplicationContext
                     "sherpa"  => await Task.Run(() => _sherpa!.Transcribe(pcm)),
                     _         => await Task.Run(() => _vosk!.Transcribe(pcm)),
                 };
+
+                // Silero Punctuation: применяется только к CTC-движкам (VOSK, GigaAM)
+                if (_punct is not null && _config?.Engine != "whisper")
+                    text = _punct.Apply(text);
 
                 if (!string.IsNullOrWhiteSpace(text))
                 {
@@ -322,7 +385,24 @@ public sealed class TrayApp : ApplicationContext
         }
         finally
         {
-            SetState(State.Ready, $"Готов  [{engLabel}]");
+            byte[]? pending;
+            bool    capturingNow;
+            lock (_lock)
+            {
+                pending      = _pendingPcm;
+                _pendingPcm  = null;
+                capturingNow = _capturingForQueue;
+                if (pending is null && !capturingNow)
+                    _state = State.Ready;
+                else if (capturingNow)
+                    _state = State.Recording; // пользователь записывает следующую фразу
+            }
+            if (pending is not null)
+                _ = RecognizeAsync(pending);
+            else if (capturingNow)
+                SetState(State.Recording, "Запись…");
+            else
+                SetState(State.Ready, $"Готов  [{engLabel}]");
         }
     }
 
@@ -333,6 +413,7 @@ public sealed class TrayApp : ApplicationContext
         _audio?.Dispose();
         _whisper?.Dispose();
         _sherpa?.Dispose();
+        _punct?.Dispose();
         _tray.Visible = false;
         _tray.Dispose();
         Application.Exit();
