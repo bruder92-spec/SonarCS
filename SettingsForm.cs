@@ -61,7 +61,7 @@ public sealed class SettingsForm : Form
             Text     = "GigaAM v3  —  точнее, русский (225 МБ)",
             Font     = new Font("Segoe UI", 10),
             Checked  = cfg.Engine == "gigaam",
-            Enabled  = File.Exists(AppConfig.GigaAmV3Model),
+            Enabled  = File.Exists(AppConfig.GigaAmV3Model) && File.Exists(AppConfig.GigaAmV3Vocab),
             Location = new Point(m, y),
             Size     = new Size(420, 22),
         });

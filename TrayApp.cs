@@ -85,6 +85,8 @@ public sealed class TrayApp : ApplicationContext
             {
                 if (!File.Exists(AppConfig.GigaAmV3Model))
                     throw new FileNotFoundException("giga-am-v3.onnx не найден", AppConfig.GigaAmV3Model);
+                if (!File.Exists(AppConfig.GigaAmV3Vocab))
+                    throw new FileNotFoundException("giga-am-v3-vocab.txt не найден", AppConfig.GigaAmV3Vocab);
                 _gigaam = new GigaAmEngine();
                 await Task.Run(() => _gigaam.Load(AppConfig.GigaAmV3Model, AppConfig.GigaAmV3Vocab));
             }

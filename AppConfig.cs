@@ -10,7 +10,7 @@ namespace VoiceTyper;
 public sealed class AppConfig
 {
     [JsonPropertyName("engine")]
-    public string Engine { get; set; } = "vosk";          // "vosk" | "whisper" | "sherpa"
+    public string Engine { get; set; } = "vosk";          // "vosk" | "whisper" | "gigaam"
 
     [JsonPropertyName("microphone_device")]
     public int MicrophoneDevice { get; set; } = -1;       // -1 = системный по умолчанию
@@ -22,7 +22,7 @@ public sealed class AppConfig
     public bool PostProcess { get; set; } = false;         // заглавная буква + точка
 
     [JsonPropertyName("use_punctuation")]
-    public bool UsePunctuation { get; set; } = false;      // Silero TE пунктуация (CTC-движки)
+    public bool UsePunctuation { get; set; } = false;      // автопунктуация (только VOSK; GigaAM и Whisper имеют её в модели)
 
     // ── пути к файлам моделей (относительно exe) ──────────────────────────────
     public static string VoskModelDir       => Path.Combine(AppContext.BaseDirectory, "model");

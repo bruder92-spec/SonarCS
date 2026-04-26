@@ -173,7 +173,7 @@ public sealed class FirstRunForm : Form
     private void CheckModelAvailability()
     {
         bool voskOk    = Directory.Exists(AppConfig.VoskModelDir);
-        bool gigaamOk  = File.Exists(AppConfig.GigaAmV3Model);
+        bool gigaamOk  = File.Exists(AppConfig.GigaAmV3Model) && File.Exists(AppConfig.GigaAmV3Vocab);
         bool whisperOk = File.Exists(AppConfig.WhisperModel);
 
         _rbVosk.Enabled = voskOk;

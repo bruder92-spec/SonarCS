@@ -37,4 +37,19 @@
     <None Condition="Exists('giga-am-v3-vocab.txt')"  Include="giga-am-v3-vocab.txt"  CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
   </ItemGroup>
 
+  <!-- Whisper model (466 MB). Place ggml-small.bin in VoiceTyperCS\ alongside the project. -->
+  <ItemGroup>
+    <None Condition="Exists('ggml-small.bin')" Include="ggml-small.bin" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+  </ItemGroup>
+
+  <!-- VOSK model directory (88 MB). Lives in the project root (../model relative to VoiceTyperCS\). -->
+  <!-- Link ensures files appear under model\ in the output directory. -->
+  <ItemGroup Condition="Exists('../model')">
+    <None Include="../model/**/*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+      <Link>model/%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </None>
+  </ItemGroup>
+
 </Project>
