@@ -17,10 +17,10 @@ public sealed class FirstRunForm : Form
 
     // ── контролы ──────────────────────────────────────────────────────────────
     private readonly RadioButton _rbVosk;
-    private readonly RadioButton _rbSherpa;
+    private readonly RadioButton _rbGigaAm3;
     private readonly RadioButton _rbWhisper;
     private readonly Label       _lblVoskInfo;
-    private readonly Label       _lblSherpaInfo;
+    private readonly Label       _lblGigaAmInfo;
     private readonly Label       _lblWhisperInfo;
     private readonly ComboBox    _cbMic;
     private readonly Button      _btnOk;
@@ -69,19 +69,19 @@ public sealed class FirstRunForm : Form
         });
         y += 32;
 
-        // ── GigaAM v2 ─────────────────────────────────────────────────────────
-        _rbSherpa = Add(new RadioButton
+        // ── GigaAM v3 ─────────────────────────────────────────────────────────
+        _rbGigaAm3 = Add(new RadioButton
         {
-            Text     = "GigaAM v2  —  точный, русский",
+            Text     = "GigaAM v3  —  точнее, русский",
             Font     = new Font("Segoe UI", 10, FontStyle.Bold),
             Location = new Point(m, y),
             Size     = new Size(440, 24),
         });
         y += 26;
 
-        _lblSherpaInfo = Add(new Label
+        _lblGigaAmInfo = Add(new Label
         {
-            Text      = "  Размер: 226 МБ  •  Задержка: ~1.5 сек  •  Качество: отличное",
+            Text      = "  Размер: 225 МБ  •  Задержка: ~1.5 сек  •  Качество: WER 3.3%",
             Font      = new Font("Segoe UI", 9),
             ForeColor = Color.DimGray,
             Location  = new Point(m + 18, y),
@@ -173,7 +173,7 @@ public sealed class FirstRunForm : Form
     private void CheckModelAvailability()
     {
         bool voskOk    = Directory.Exists(AppConfig.VoskModelDir);
-        bool sherpaOk  = File.Exists(AppConfig.SherpaModel);
+        bool gigaamOk  = File.Exists(AppConfig.GigaAmV3Model);
         bool whisperOk = File.Exists(AppConfig.WhisperModel);
 
         _rbVosk.Enabled = voskOk;
@@ -183,11 +183,11 @@ public sealed class FirstRunForm : Form
             _lblVoskInfo.ForeColor = Color.Red;
         }
 
-        _rbSherpa.Enabled = sherpaOk;
-        if (!sherpaOk)
+        _rbGigaAm3.Enabled = gigaamOk;
+        if (!gigaamOk)
         {
-            _lblSherpaInfo.Text      = "  ⚠  Файл «giga-am-v2.onnx» не найден рядом с VoiceTyper.exe";
-            _lblSherpaInfo.ForeColor = Color.Red;
+            _lblGigaAmInfo.Text      = "  ⚠  Файл «giga-am-v3.onnx» не найден рядом с VoiceTyper.exe";
+            _lblGigaAmInfo.ForeColor = Color.Red;
         }
 
         _rbWhisper.Enabled = whisperOk;
@@ -198,9 +198,9 @@ public sealed class FirstRunForm : Form
         }
 
         // авто-выбор первого доступного движка
-        if (!voskOk && sherpaOk)   _rbSherpa.Checked  = true;
-        if (!voskOk && !sherpaOk && whisperOk) _rbWhisper.Checked = true;
-        if (!voskOk && !sherpaOk && !whisperOk)
+        if (!voskOk && gigaamOk)   _rbGigaAm3.Checked = true;
+        if (!voskOk && !gigaamOk && whisperOk) _rbWhisper.Checked = true;
+        if (!voskOk && !gigaamOk && !whisperOk)
         {
             _btnOk.Enabled = false;
             Text += "  [ОШИБКА: модели не найдены]";
@@ -210,7 +210,7 @@ public sealed class FirstRunForm : Form
     // ── OK ────────────────────────────────────────────────────────────────────
     private void BtnOk_Click(object? sender, EventArgs e)
     {
-        SelectedEngine    = _rbWhisper.Checked ? "whisper" : _rbSherpa.Checked ? "sherpa" : "vosk";
+        SelectedEngine    = _rbWhisper.Checked ? "whisper" : _rbGigaAm3.Checked ? "gigaam" : "vosk";
         SelectedMicDevice = _cbMic.SelectedIndex - 1;   // 0 → -1 (default), 1 → 0, 2 → 1, …
         DialogResult      = DialogResult.OK;
     }

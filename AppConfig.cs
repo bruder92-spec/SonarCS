@@ -27,8 +27,7 @@ public sealed class AppConfig
     // ── пути к файлам моделей (относительно exe) ──────────────────────────────
     public static string VoskModelDir       => Path.Combine(AppContext.BaseDirectory, "model");
     public static string WhisperModel       => Path.Combine(AppContext.BaseDirectory, "ggml-small.bin");
-    public static string SherpaModel        => Path.Combine(AppContext.BaseDirectory, "giga-am-v2.onnx");
-    public static string SherpaTokens       => Path.Combine(AppContext.BaseDirectory, "giga-am-tokens.txt");
+    public static string GigaAmV3Model      => Path.Combine(AppContext.BaseDirectory, "giga-am-v3.onnx");
     public static string PunctuationModel   => Path.Combine(AppContext.BaseDirectory, "silero_te.onnx");
 
     // ── загрузка / сохранение ─────────────────────────────────────────────────

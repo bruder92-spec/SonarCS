@@ -18,8 +18,7 @@
     <PackageReference Include="Whisper.net"                          Version="1.9.0"   />
     <PackageReference Include="Whisper.net.Runtime"                  Version="1.9.0"   />
     <PackageReference Include="Whisper.net.Runtime.Vulkan"           Version="1.9.0"   />
-    <PackageReference Include="org.k2fsa.sherpa.onnx"                Version="1.12.40" />
-    <PackageReference Include="org.k2fsa.sherpa.onnx.runtime.win-x64" Version="1.12.40" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime"             Version="1.20.1"  />
   </ItemGroup>
 
   <!-- VC++ runtime DLLs, required by whisper.dll (MSVC-compiled). -->
@@ -30,10 +29,11 @@
     <None Include="vcredist\MSVCP140.dll"       CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
   </ItemGroup>
 
-  <!-- GigaAM v2 model files for sherpa-onnx engine (226 MB + 196 B). -->
+  <!-- GigaAM v3 model (225 MB). Conditional: build does not fail if file is absent. -->
+  <!-- Download: https://huggingface.co/istupakov/gigaam-v3-onnx/resolve/main/v3_ctc.int8.onnx -->
+  <!-- Then rename to giga-am-v3.onnx and place next to VoiceTyper.exe (or in VoiceTyperCS\ for publish). -->
   <ItemGroup>
-    <None Include="giga-am-v2.onnx"      CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
-    <None Include="giga-am-tokens.txt"   CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+    <None Condition="Exists('giga-am-v3.onnx')" Include="giga-am-v3.onnx" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
   </ItemGroup>
 
 </Project>

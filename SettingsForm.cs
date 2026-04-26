@@ -14,7 +14,7 @@ public sealed class SettingsForm : Form
 
     private readonly RadioButton _rbVosk;
     private readonly RadioButton _rbWhisper;
-    private readonly RadioButton _rbSherpa;
+    private readonly RadioButton _rbGigaAm3;
     private readonly Label       _lblGpu;
     private readonly ComboBox    _cbMic;
     private readonly Button      _btnHotkey;
@@ -56,12 +56,12 @@ public sealed class SettingsForm : Form
         });
         y += 26;
 
-        _rbSherpa = Add(new RadioButton
+        _rbGigaAm3 = Add(new RadioButton
         {
-            Text     = "GigaAM v2  —  точный, русский (226 МБ)",
+            Text     = "GigaAM v3  —  точнее, русский (225 МБ)",
             Font     = new Font("Segoe UI", 10),
-            Checked  = cfg.Engine == "sherpa",
-            Enabled  = File.Exists(AppConfig.SherpaModel),
+            Checked  = cfg.Engine == "gigaam",
+            Enabled  = File.Exists(AppConfig.GigaAmV3Model),
             Location = new Point(m, y),
             Size     = new Size(420, 22),
         });
@@ -287,7 +287,7 @@ public sealed class SettingsForm : Form
     // ── Применить ─────────────────────────────────────────────────────────────
     private void BtnApply_Click(object? sender, EventArgs e)
     {
-        _cfg.Engine          = _rbWhisper.Checked ? "whisper" : _rbSherpa.Checked ? "sherpa" : "vosk";
+        _cfg.Engine          = _rbWhisper.Checked ? "whisper" : _rbGigaAm3.Checked ? "gigaam" : "vosk";
         _cfg.MicrophoneDevice = _cbMic.SelectedIndex - 1;
         _cfg.HotkeyVk        = _capturedVk;
         _cfg.PostProcess     = _chkPost.Checked;

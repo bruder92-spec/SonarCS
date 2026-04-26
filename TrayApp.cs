@@ -26,7 +26,7 @@ public sealed class TrayApp : ApplicationContext
     private AppConfig?         _config;
     private VoskEngine?        _vosk;
     private WhisperEngine?     _whisper;
-    private SherpaEngine?      _sherpa;
+    private GigaAmEngine?      _gigaam;
     private AudioCapture?      _audio;
     private KeyboardHook?      _hook;
     private bool               _settingsOpen;
@@ -81,12 +81,12 @@ public sealed class TrayApp : ApplicationContext
                 _whisper = new WhisperEngine(AppConfig.WhisperModel);
                 await Task.Run(_whisper.Load);
             }
-            else if (_config.Engine == "sherpa")
+            else if (_config.Engine == "gigaam")
             {
-                if (!File.Exists(AppConfig.SherpaModel))
-                    throw new FileNotFoundException("giga-am-v2.onnx не найден", AppConfig.SherpaModel);
-                _sherpa = new SherpaEngine(AppConfig.SherpaModel, AppConfig.SherpaTokens);
-                await Task.Run(_sherpa.Load);
+                if (!File.Exists(AppConfig.GigaAmV3Model))
+                    throw new FileNotFoundException("giga-am-v3.onnx не найден", AppConfig.GigaAmV3Model);
+                _gigaam = new GigaAmEngine();
+                await Task.Run(() => _gigaam.Load(AppConfig.GigaAmV3Model));
             }
             else
             {
@@ -126,7 +126,7 @@ public sealed class TrayApp : ApplicationContext
     private string GetEngineLabel() => _config?.Engine switch
     {
         "whisper" => "Whisper Small" + (_whisper?.IsGpu == true ? " [GPU]" : " [CPU]"),
-        "sherpa"  => "GigaAM v2",
+        "gigaam"  => "GigaAM v3",
         _         => "VOSK",
     };
 
@@ -357,7 +357,7 @@ public sealed class TrayApp : ApplicationContext
                 string text = _config?.Engine switch
                 {
                     "whisper" => await _whisper!.TranscribeAsync(pcm),
-                    "sherpa"  => await Task.Run(() => _sherpa!.Transcribe(pcm)),
+                    "gigaam"  => await Task.Run(() => _gigaam!.Transcribe(pcm)),
                     _         => await Task.Run(() => _vosk!.Transcribe(pcm)),
                 };
 
@@ -412,7 +412,7 @@ public sealed class TrayApp : ApplicationContext
         _hook?.Dispose();
         _audio?.Dispose();
         _whisper?.Dispose();
-        _sherpa?.Dispose();
+        _gigaam?.Dispose();
         _punct?.Dispose();
         _tray.Visible = false;
         _tray.Dispose();
