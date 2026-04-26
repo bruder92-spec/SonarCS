@@ -35,9 +35,10 @@ public sealed class TrayApp : ApplicationContext
     private byte[]? _pendingPcm;        // PCM следующей фразы, ждёт завершения текущего распознавания
     private bool    _capturingForQueue; // идёт запись «в очередь» пока Recognizing
 
-    // ── v4: пунктуация и оверлей ──────────────────────────────────────────────
-    private PunctuationEngine? _punct;
-    private OverlayForm?       _overlay;
+    // ── overlay ───────────────────────────────────────────────────────────────
+    private OverlayForm? _overlay;
+
+    private static readonly Image s_gearIcon = MakeGearIcon();
 
     private enum State { Loading, Ready, Recording, Recognizing, Error }
     private volatile State _state = State.Loading;
@@ -106,9 +107,6 @@ public sealed class TrayApp : ApplicationContext
             _hook          = new KeyboardHook(vkCode: _config.HotkeyVk);
             _hook.Pressed  += OnKeyDown;
             _hook.Released += OnKeyUp;
-
-            if (_config.UsePunctuation && PunctuationEngine.IsAvailable)
-                _punct = new PunctuationEngine();
 
             string engineLabel = GetEngineLabel();
             string micLabel    = GetMicName(_config.MicrophoneDevice);
@@ -222,7 +220,9 @@ public sealed class TrayApp : ApplicationContext
         menu.Items.Add(micItem);
 
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Настройки…", null, (_, _) => OpenSettings());
+        var settingsItem = new ToolStripMenuItem("Настройки…", s_gearIcon, (_, _) => OpenSettings())
+            { ImageScaling = ToolStripItemImageScaling.None };
+        menu.Items.Add(settingsItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Выйти", null, (_, _) => Shutdown());
 
@@ -363,15 +363,8 @@ public sealed class TrayApp : ApplicationContext
                     _         => await Task.Run(() => _vosk!.Transcribe(pcm)),
                 };
 
-                // Пунктуация: только VOSK (GigaAM e2e и Whisper имеют её в модели)
-                if (_punct is not null && _config?.Engine == "vosk")
-                    text = _punct.Apply(text);
-
                 if (!string.IsNullOrWhiteSpace(text))
                 {
-                    if (_config?.PostProcess == true)
-                        text = TextProcessor.Process(text);
-
                     Console.WriteLine($"[{engLabel}] {text}");
                     TextTyper.Type(text + " ");
                 }
@@ -415,10 +408,54 @@ public sealed class TrayApp : ApplicationContext
         _audio?.Dispose();
         _whisper?.Dispose();
         _gigaam?.Dispose();
-        _punct?.Dispose();
         _tray.Visible = false;
         _tray.Dispose();
         Application.Exit();
+    }
+
+    // ── иконка шестерёнки 16×16 для пункта «Настройки…» ─────────────────────
+    private static Bitmap MakeGearIcon()
+    {
+        const int S = 16;
+        var bmp = new Bitmap(S, S, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        using var g = Graphics.FromImage(bmp);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.Clear(Color.Transparent);
+
+        const float Cx = 7.5f, Cy = 7.5f, Ro = 7f, Ri = 4.8f, Rh = 2.1f;
+        const int   N  = 8;
+        double step = Math.PI * 2 / N;
+        double half = step * 0.34;
+
+        using var path = new System.Drawing.Drawing2D.GraphicsPath();
+        for (int i = 0; i < N; i++)
+        {
+            double a    = i * step;
+            double a0   = a - half, a1 = a - half * 0.35, a2 = a + half * 0.35, a3 = a + half;
+            path.AddLine(
+                Cx + Ri * (float)Math.Cos(a0), Cy + Ri * (float)Math.Sin(a0),
+                Cx + Ro * (float)Math.Cos(a1), Cy + Ro * (float)Math.Sin(a1));
+            path.AddLine(
+                Cx + Ro * (float)Math.Cos(a1), Cy + Ro * (float)Math.Sin(a1),
+                Cx + Ro * (float)Math.Cos(a2), Cy + Ro * (float)Math.Sin(a2));
+            path.AddLine(
+                Cx + Ro * (float)Math.Cos(a2), Cy + Ro * (float)Math.Sin(a2),
+                Cx + Ri * (float)Math.Cos(a3), Cy + Ri * (float)Math.Sin(a3));
+            double a4 = (i + 1) * step - half;
+            path.AddArc(Cx - Ri, Cy - Ri, Ri * 2, Ri * 2,
+                (float)(a3 * 180 / Math.PI),
+                (float)((a4 - a3) * 180 / Math.PI));
+        }
+        path.CloseFigure();
+
+        using var brush = new SolidBrush(Color.FromArgb(75, 95, 130));
+        g.FillPath(brush, path);
+
+        // центральное отверстие — прозрачное
+        g.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceCopy;
+        g.FillEllipse(new SolidBrush(Color.Transparent), Cx - Rh, Cy - Rh, Rh * 2, Rh * 2);
+
+        return bmp;
     }
 
     protected override void Dispose(bool disposing)

@@ -4,9 +4,9 @@ namespace VoiceTyper;
 
 /// <summary>
 /// Окно настроек Voice Typer.
-/// Секции: движок, микрофон, горячая клавиша, постобработка текста.
+/// Секции: движок, микрофон, горячая клавиша, автозапуск.
 /// «Применить» сохраняет config.json и перезапускает процесс.
-/// Перехват горячей клавиши — через WndProc (WM_KEYDOWN / WM_SYSKEYDOWN).
+/// Перехват горячей клавиши — через ProcessCmdKey (WM_KEYDOWN / WM_SYSKEYDOWN).
 /// </summary>
 public sealed class SettingsForm : Form
 {
@@ -19,8 +19,6 @@ public sealed class SettingsForm : Form
     private readonly ComboBox    _cbMic;
     private readonly Button      _btnHotkey;
     private readonly Label       _lblHotkeyHint;
-    private readonly CheckBox    _chkPost;
-    private readonly CheckBox    _chkPunct;
     private readonly CheckBox    _chkAutoStart;
 
     private bool _capturing;
@@ -32,7 +30,7 @@ public sealed class SettingsForm : Form
         _capturedVk = cfg.HotkeyVk;
 
         Text            = "Voice Typer — Настройки";
-        ClientSize      = new Size(460, 618);
+        ClientSize      = new Size(460, 474);
         StartPosition   = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox     = false;
@@ -143,52 +141,6 @@ public sealed class SettingsForm : Form
 
         Add(Separator(ref y));
 
-        // ── Постобработка текста ──────────────────────────────────────────────
-        Add(Header("Обработка текста", ref y));
-
-        _chkPost = Add(new CheckBox
-        {
-            Text     = "Заглавная буква в начале и точка в конце",
-            Font     = new Font("Segoe UI", 10),
-            Checked  = cfg.PostProcess,
-            Location = new Point(m, y),
-            Size     = new Size(420, 22),
-        });
-        y += 26;
-
-        Add(new Label
-        {
-            Text      = "  Пример: «привет мир» → «Привет мир.»",
-            Font      = new Font("Segoe UI", 9),
-            ForeColor = Color.DimGray,
-            Location  = new Point(m + 18, y),
-            Size      = new Size(420, 18),
-        });
-        y += 28;
-
-        _chkPunct = Add(new CheckBox
-        {
-            Text     = "Автопунктуация  (запятые, союзы, вопросы)",
-            Font     = new Font("Segoe UI", 10),
-            Checked  = cfg.UsePunctuation,
-            Enabled  = true,
-            Location = new Point(m, y),
-            Size     = new Size(420, 22),
-        });
-        y += 26;
-
-        Add(new Label
-        {
-            Text      = "  Применяется к VOSK  (GigaAM v3 и Whisper имеют пунктуацию в модели)",
-            Font      = new Font("Segoe UI", 9),
-            ForeColor = Color.DimGray,
-            Location  = new Point(m + 18, y),
-            Size      = new Size(420, 18),
-        });
-        y += 22;
-
-        Add(Separator(ref y));
-
         // ── Автозапуск ────────────────────────────────────────────────────────
         _chkAutoStart = Add(new CheckBox
         {
@@ -236,11 +188,9 @@ public sealed class SettingsForm : Form
         _btnHotkey.Text      = "Нажмите клавишу…";
         _lblHotkeyHint.Text  = "Esc — отмена";
         _btnHotkey.BackColor = Color.FromArgb(255, 240, 180);
-        ActiveControl        = null;   // убираем фокус с кнопки на форму
+        ActiveControl        = null;
     }
 
-    // ProcessCmdKey перехватывает ВСЕ клавиши на уровне формы,
-    // включая WM_SYSKEYDOWN (Alt), независимо от того, какой контрол в фокусе.
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         const int WM_KEYDOWN    = 0x0100;
@@ -250,13 +200,12 @@ public sealed class SettingsForm : Form
         {
             int vk = (int)msg.WParam;
 
-            if (vk == 0x1B)   // Escape — отмена
+            if (vk == 0x1B)
             {
                 FinishCapture(_cfg.HotkeyVk);
                 return true;
             }
 
-            // Для Alt (0x12) определяем левый/правый по extended-биту lParam
             if (vk == 0x12)
             {
                 bool extended = ((int)msg.LParam & 0x01000000) != 0;
@@ -264,7 +213,6 @@ public sealed class SettingsForm : Form
                 return true;
             }
 
-            // Чистые Shift (0x10) и Ctrl (0x11) пропускаем — они не годятся как одиночные хоткеи
             if (vk != 0x10 && vk != 0x11)
             {
                 FinishCapture(vk);
@@ -286,11 +234,9 @@ public sealed class SettingsForm : Form
     // ── Применить ─────────────────────────────────────────────────────────────
     private void BtnApply_Click(object? sender, EventArgs e)
     {
-        _cfg.Engine          = _rbWhisper.Checked ? "whisper" : _rbGigaAm3.Checked ? "gigaam" : "vosk";
+        _cfg.Engine           = _rbWhisper.Checked ? "whisper" : _rbGigaAm3.Checked ? "gigaam" : "vosk";
         _cfg.MicrophoneDevice = _cbMic.SelectedIndex - 1;
-        _cfg.HotkeyVk        = _capturedVk;
-        _cfg.PostProcess     = _chkPost.Checked;
-        _cfg.UsePunctuation  = _chkPunct.Checked;
+        _cfg.HotkeyVk         = _capturedVk;
         _cfg.Save();
 
         if (_chkAutoStart.Checked) AutoStartManager.Enable();
@@ -308,7 +254,7 @@ public sealed class SettingsForm : Form
         for (int i = 0; i < WaveIn.DeviceCount; i++)
             _cbMic.Items.Add(WaveIn.GetCapabilities(i).ProductName);
 
-        int sel = _cfg.MicrophoneDevice + 1;   // -1 → 0, 0 → 1, …
+        int sel = _cfg.MicrophoneDevice + 1;
         _cbMic.SelectedIndex = sel >= 0 && sel < _cbMic.Items.Count ? sel : 0;
     }
 

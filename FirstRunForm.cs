@@ -55,7 +55,6 @@ public sealed class FirstRunForm : Form
             Font     = new Font("Segoe UI", 10, FontStyle.Bold),
             Location = new Point(m, y),
             Size     = new Size(440, 24),
-            Checked  = true,
         });
         y += 26;
 
@@ -197,14 +196,11 @@ public sealed class FirstRunForm : Form
             _lblWhisperInfo.ForeColor = Color.Red;
         }
 
-        // авто-выбор первого доступного движка
-        if (!voskOk && gigaamOk)   _rbGigaAm3.Checked = true;
-        if (!voskOk && !gigaamOk && whisperOk) _rbWhisper.Checked = true;
-        if (!voskOk && !gigaamOk && !whisperOk)
-        {
-            _btnOk.Enabled = false;
-            Text += "  [ОШИБКА: модели не найдены]";
-        }
+        // выбор по умолчанию: GigaAM → VOSK → Whisper
+        if      (gigaamOk)                       _rbGigaAm3.Checked = true;
+        else if (voskOk)                         _rbVosk.Checked    = true;
+        else if (whisperOk)                      _rbWhisper.Checked = true;
+        else { _btnOk.Enabled = false; Text += "  [ОШИБКА: модели не найдены]"; }
     }
 
     // ── OK ────────────────────────────────────────────────────────────────────

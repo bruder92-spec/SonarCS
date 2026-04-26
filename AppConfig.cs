@@ -10,25 +10,19 @@ namespace VoiceTyper;
 public sealed class AppConfig
 {
     [JsonPropertyName("engine")]
-    public string Engine { get; set; } = "vosk";          // "vosk" | "whisper" | "gigaam"
+    public string Engine { get; set; } = "gigaam";         // "vosk" | "whisper" | "gigaam"
 
     [JsonPropertyName("microphone_device")]
-    public int MicrophoneDevice { get; set; } = -1;       // -1 = системный по умолчанию
+    public int MicrophoneDevice { get; set; } = -1;        // -1 = системный по умолчанию
 
     [JsonPropertyName("hotkey_vk")]
-    public int HotkeyVk { get; set; } = 0xA4;             // VK_LMENU = левый Alt
-
-    [JsonPropertyName("post_process")]
-    public bool PostProcess { get; set; } = false;         // заглавная буква + точка
-
-    [JsonPropertyName("use_punctuation")]
-    public bool UsePunctuation { get; set; } = false;      // автопунктуация (только VOSK; GigaAM и Whisper имеют её в модели)
+    public int HotkeyVk { get; set; } = 0xA4;              // VK_LMENU = левый Alt
 
     // ── пути к файлам моделей (относительно exe) ──────────────────────────────
-    public static string VoskModelDir       => Path.Combine(AppContext.BaseDirectory, "model");
-    public static string WhisperModel       => Path.Combine(AppContext.BaseDirectory, "ggml-small.bin");
-    public static string GigaAmV3Model      => Path.Combine(AppContext.BaseDirectory, "giga-am-v3.onnx");
-    public static string GigaAmV3Vocab      => Path.Combine(AppContext.BaseDirectory, "giga-am-v3-vocab.txt");
+    public static string VoskModelDir  => Path.Combine(AppContext.BaseDirectory, "model");
+    public static string WhisperModel  => Path.Combine(AppContext.BaseDirectory, "ggml-small.bin");
+    public static string GigaAmV3Model => Path.Combine(AppContext.BaseDirectory, "giga-am-v3.onnx");
+    public static string GigaAmV3Vocab => Path.Combine(AppContext.BaseDirectory, "giga-am-v3-vocab.txt");
 
     // ── загрузка / сохранение ─────────────────────────────────────────────────
     private static string ConfigPath => Path.Combine(AppContext.BaseDirectory, "config.json");
