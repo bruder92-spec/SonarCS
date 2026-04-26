@@ -5,32 +5,32 @@ namespace VoiceTyper;
 
 /// <summary>
 /// GigaAM v3 — прямой ONNX-инференс без sherpa-onnx прослойки.
-/// Модель: istupakov/gigaam-v3-onnx → v3_ctc.int8.onnx (переименовать в giga-am-v3.onnx, 225 МБ).
-/// WER ≈ 3.3% на русском (vs ~5% у GigaAM v2).
+/// Модель: istupakov/gigaam-v3-onnx → v3_e2e_ctc.int8.onnx (225 МБ, WER ≈ 3.3%).
+/// E2E-модель: выдаёт текст с пунктуацией, заглавными буквами и цифрами.
 ///
 /// Preprocessing: n_fft=320, hop=160, 64 mel-фильтра HTK, center=false,
 /// периодическое окно Ханна, ln(max(e, 1e-9)), per-feature normalization.
 /// DFT реализован вручную: n_fft=320 не является степенью 2.
 ///
-/// Vocab (34 класса): 0=' ', 1='а'…32='я' (без ё), 33=blank.
-/// Скачать: https://huggingface.co/istupakov/gigaam-v3-onnx/resolve/main/v3_ctc.int8.onnx
+/// Vocab (257 классов): загружается из giga-am-v3-vocab.txt.
+///   ▁ = пробел, &lt;blk&gt; = CTC blank (индекс 256).
 /// </summary>
 public sealed class GigaAmEngine : IDisposable
 {
     private InferenceSession? _session;
+    private string[]?         _vocab;    // index → token string
+    private int               _nVocab;
+    private int               _blankId;
 
     private const int SampleRate = 16_000;
     private const int NFft       = 320;
     private const int HopLength  = 160;
     private const int NMel       = 64;
-    private const int Blank      = 33;   // CTC blank index
-    private const int NVocab     = 34;   // Blank + 1
 
     private static readonly float[]  s_hann;
     private static readonly float[,] s_melFb;
     private static readonly float[,] s_twCos;   // [NFft/2+1, NFft]
     private static readonly float[,] s_twSin;
-    private static readonly char[]   s_vocab;   // length = Blank = 33
 
     static GigaAmEngine()
     {
@@ -47,17 +47,11 @@ public sealed class GigaAmEngine : IDisposable
                 s_twCos[k, n] = (float)Math.Cos(a);
                 s_twSin[k, n] = (float)Math.Sin(a);
             }
-
-        // 0=' ', 1='а'…32='я' (32 буквы без ё)
-        s_vocab = new char[Blank];
-        s_vocab[0] = ' ';
-        const string ru = "абвгдежзийклмнопрстуфхцчшщъыьэюя";
-        for (int i = 0; i < ru.Length; i++)
-            s_vocab[i + 1] = ru[i];
     }
 
-    public void Load(string modelPath)
+    public void Load(string modelPath, string vocabPath)
     {
+        (_vocab, _nVocab, _blankId) = LoadVocab(vocabPath);
         var opts = new SessionOptions { ExecutionMode = ExecutionMode.ORT_SEQUENTIAL };
         _session = new InferenceSession(modelPath, opts);
     }
@@ -90,8 +84,37 @@ public sealed class GigaAmEngine : IDisposable
 
         using var results = _session.Run(inputs);
         float[] lp = results[0].AsEnumerable<float>().ToArray();
-        int T2 = lp.Length / NVocab;
+        int T2 = lp.Length / _nVocab;
         return CtcGreedyDecode(lp, T2);
+    }
+
+    // ── загрузка словаря из файла ─────────────────────────────────────────────
+    // Формат: «токен индекс» (по одной паре на строку).
+    private static (string[] vocab, int nVocab, int blankId) LoadVocab(string path)
+    {
+        var lines = File.ReadAllLines(path, System.Text.Encoding.UTF8);
+        int maxId = 0;
+        var pairs = new List<(int id, string token)>(lines.Length);
+        foreach (var line in lines)
+        {
+            var s = line.AsSpan().Trim();
+            if (s.IsEmpty) continue;
+            int sp = s.LastIndexOf(' ');
+            if (sp < 0) continue;
+            if (!int.TryParse(s[(sp + 1)..], out int id)) continue;
+            string token = s[..sp].ToString();
+            pairs.Add((id, token));
+            if (id > maxId) maxId = id;
+        }
+
+        var vocab  = new string[maxId + 1];
+        int blankId = maxId;   // fallback: last index
+        foreach (var (id, token) in pairs)
+        {
+            vocab[id] = token;
+            if (token == "<blk>") blankId = id;
+        }
+        return (vocab, maxId + 1, blankId);
     }
 
     // ── PCM int16 → float32 [-1, 1] ──────────────────────────────────────────
@@ -150,7 +173,7 @@ public sealed class GigaAmEngine : IDisposable
 
             float sq = 0;
             for (int t = 0; t < nFrames; t++) { float d = mel[m, t] - mean; sq += d * d; }
-            float std = MathF.Sqrt(sq / nFrames);
+            float std    = MathF.Sqrt(sq / nFrames);
             float invStd = 1f / MathF.Max(std, 1e-5f);
 
             for (int t = 0; t < nFrames; t++)
@@ -161,7 +184,7 @@ public sealed class GigaAmEngine : IDisposable
     }
 
     // ── CTC жадное декодирование ──────────────────────────────────────────────
-    private static string CtcGreedyDecode(float[] logProbs, int T)
+    private string CtcGreedyDecode(float[] logProbs, int T)
     {
         var sb   = new System.Text.StringBuilder();
         int prev = -1;
@@ -169,14 +192,18 @@ public sealed class GigaAmEngine : IDisposable
         for (int t = 0; t < T; t++)
         {
             int   best    = 0;
-            float bestVal = logProbs[t * NVocab];
-            for (int c = 1; c < NVocab; c++)
+            float bestVal = logProbs[t * _nVocab];
+            for (int c = 1; c < _nVocab; c++)
             {
-                float v = logProbs[t * NVocab + c];
+                float v = logProbs[t * _nVocab + c];
                 if (v > bestVal) { bestVal = v; best = c; }
             }
-            if (best != Blank && best != prev)
-                sb.Append(s_vocab[best]);
+            if (best != _blankId && best != prev)
+            {
+                string token = _vocab![best] ?? "";
+                if      (token == "▁")   sb.Append(' ');
+                else if (token.Length > 0 && token[0] != '<') sb.Append(token);
+            }
             prev = best;
         }
 

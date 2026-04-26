@@ -86,7 +86,7 @@ public sealed class TrayApp : ApplicationContext
                 if (!File.Exists(AppConfig.GigaAmV3Model))
                     throw new FileNotFoundException("giga-am-v3.onnx не найден", AppConfig.GigaAmV3Model);
                 _gigaam = new GigaAmEngine();
-                await Task.Run(() => _gigaam.Load(AppConfig.GigaAmV3Model));
+                await Task.Run(() => _gigaam.Load(AppConfig.GigaAmV3Model, AppConfig.GigaAmV3Vocab));
             }
             else
             {
@@ -361,8 +361,8 @@ public sealed class TrayApp : ApplicationContext
                     _         => await Task.Run(() => _vosk!.Transcribe(pcm)),
                 };
 
-                // Silero Punctuation: применяется только к CTC-движкам (VOSK, GigaAM)
-                if (_punct is not null && _config?.Engine != "whisper")
+                // Пунктуация: только VOSK (GigaAM e2e и Whisper имеют её в модели)
+                if (_punct is not null && _config?.Engine == "vosk")
                     text = _punct.Apply(text);
 
                 if (!string.IsNullOrWhiteSpace(text))

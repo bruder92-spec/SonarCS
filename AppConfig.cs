@@ -28,6 +28,7 @@ public sealed class AppConfig
     public static string VoskModelDir       => Path.Combine(AppContext.BaseDirectory, "model");
     public static string WhisperModel       => Path.Combine(AppContext.BaseDirectory, "ggml-small.bin");
     public static string GigaAmV3Model      => Path.Combine(AppContext.BaseDirectory, "giga-am-v3.onnx");
+    public static string GigaAmV3Vocab      => Path.Combine(AppContext.BaseDirectory, "giga-am-v3-vocab.txt");
 
     // ── загрузка / сохранение ─────────────────────────────────────────────────
     private static string ConfigPath => Path.Combine(AppContext.BaseDirectory, "config.json");

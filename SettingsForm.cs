@@ -179,7 +179,7 @@ public sealed class SettingsForm : Form
 
         Add(new Label
         {
-            Text      = "  Применяется к VOSK и GigaAM (Whisper уже имеет пунктуацию)",
+            Text      = "  Применяется к VOSK  (GigaAM v3 и Whisper имеют пунктуацию в модели)",
             Font      = new Font("Segoe UI", 9),
             ForeColor = Color.DimGray,
             Location  = new Point(m + 18, y),
