@@ -111,7 +111,8 @@ public sealed class GigaAmEngine : IDisposable
         int blankId = maxId;   // fallback: last index
         foreach (var (id, token) in pairs)
         {
-            vocab[id] = token;
+            // ▁ (U+2581) — разделитель слов → нормализуем в обычный пробел
+            vocab[id] = token.Length == 1 && token[0] == '▁' ? " " : token;
             if (token == "<blk>") blankId = id;
         }
         return (vocab, maxId + 1, blankId);
@@ -201,13 +202,15 @@ public sealed class GigaAmEngine : IDisposable
             if (best != _blankId && best != prev)
             {
                 string token = _vocab![best] ?? "";
-                if      (token == "▁")   sb.Append(' ');
-                else if (token.Length > 0 && token[0] != '<') sb.Append(token);
+                // пробел уже нормализован в LoadVocab (▁→" "); пропускаем только служебные <tokens>
+                if (token.Length > 0 && token[0] != '<')
+                    sb.Append(token);
             }
             prev = best;
         }
 
-        return sb.ToString().Trim();
+        // страховка: если ▁ всё же просочился — заменяем на пробел
+        return sb.ToString().Replace('▁', ' ').Trim();
     }
 
     // ── периодическое окно Ханна ──────────────────────────────────────────────
