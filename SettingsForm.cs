@@ -166,13 +166,12 @@ public sealed class SettingsForm : Form
         });
         y += 28;
 
-        bool punctAvail = PunctuationEngine.IsAvailable;
         _chkPunct = Add(new CheckBox
         {
-            Text     = "Пунктуация Silero TE" + (punctAvail ? "" : "  [модель silero_te.onnx не найдена]"),
+            Text     = "Автопунктуация  (запятые, союзы, вопросы)",
             Font     = new Font("Segoe UI", 10),
-            Checked  = cfg.UsePunctuation && punctAvail,
-            Enabled  = punctAvail,
+            Checked  = cfg.UsePunctuation,
+            Enabled  = true,
             Location = new Point(m, y),
             Size     = new Size(420, 22),
         });
@@ -182,7 +181,7 @@ public sealed class SettingsForm : Form
         {
             Text      = "  Применяется к VOSK и GigaAM (Whisper уже имеет пунктуацию)",
             Font      = new Font("Segoe UI", 9),
-            ForeColor = punctAvail ? Color.DimGray : Color.FromArgb(180, 60, 60),
+            ForeColor = Color.DimGray,
             Location  = new Point(m + 18, y),
             Size      = new Size(420, 18),
         });
