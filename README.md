@@ -97,12 +97,16 @@ KeyDown              — нажатие клавиши перехвачено
 
 ## Сборка из исходников
 
+> Для обычного использования достаточно скачать готовый дистрибутив из [Releases](../../releases/latest) — модель уже включена.
+
+Если вы хотите собрать Sonar из исходного кода:
+
 ```bash
 # Требуется .NET 8 SDK
 dotnet publish Sonar.csproj --configuration Release --runtime win-x64 --self-contained true -o dist/Sonar
 ```
 
-Модель `giga-am-v3.onnx` в репозиторий не включена из-за размера (215 МБ). Скачайте с HuggingFace:
+Модель в репозитории отсутствует (215 МБ — слишком велика для git). Скачайте с HuggingFace и положите рядом с `Sonar.exe`:
 - [v3_e2e_ctc.int8.onnx](https://huggingface.co/istupakov/gigaam-v3-onnx/resolve/main/v3_e2e_ctc.int8.onnx) → переименовать в `giga-am-v3.onnx`
 - [v3_e2e_ctc_vocab.txt](https://huggingface.co/istupakov/gigaam-v3-onnx/resolve/main/v3_e2e_ctc_vocab.txt) → переименовать в `giga-am-v3-vocab.txt`
 
