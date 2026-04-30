@@ -116,7 +116,7 @@ dotnet publish Sonar.csproj --configuration Release --runtime win-x64 --self-con
 
 | Компонент | Лицензия | Автор |
 |---|---|---|
-| GigaAM v3 (ONNX) | Apache 2.0 | SberDevices / istupakov |
+| GigaAM v3 (ONNX) | MIT | SberDevices / istupakov |
 | NAudio | MIT | Mark Heath |
 | Microsoft.ML.OnnxRuntime | MIT | Microsoft |
 
