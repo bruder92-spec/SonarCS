@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 
-namespace VoiceTyper;
+namespace Sonar;
 
 /// <summary>
 /// Глобальный перехват нажатий через WH_KEYBOARD_LL.
@@ -42,7 +42,15 @@ public sealed class KeyboardHook : IDisposable
                 // Для WH_KEYBOARD_LL параметр hModule игнорируется Windows — передаём IntPtr.Zero.
                 _hook = SetWindowsHookEx(WH_KEYBOARD_LL, _proc, IntPtr.Zero, 0);
                 if (_hook == IntPtr.Zero)
-                    threadEx = new Win32Exception(Marshal.GetLastWin32Error(), "Не удалось установить хук клавиатуры");
+                {
+                    int err = Marshal.GetLastWin32Error();
+                    Logger.Error($"SetWindowsHookEx не удался: Win32={err} (возможно, заблокирован антивирусом или политиками)");
+                    threadEx = new Win32Exception(err, "Не удалось установить хук клавиатуры");
+                }
+                else
+                {
+                    Logger.Info($"Хук установлен: VK=0x{vkCode:X2}, thread={_win32ThreadId}");
+                }
             }
             catch (Exception ex) { threadEx = ex; }
             finally { ready.Set(); }
@@ -111,6 +119,5 @@ public sealed class KeyboardHook : IDisposable
     [DllImport("user32.dll")]   static extern bool   TranslateMessage(ref MSG msg);
     [DllImport("user32.dll")]   static extern IntPtr DispatchMessage(ref MSG msg);
     [DllImport("user32.dll")]   static extern bool   PostThreadMessage(int tid, uint msg, UIntPtr wp, IntPtr lp);
-    [DllImport("kernel32.dll")] static extern IntPtr GetModuleHandle(string name);
     [DllImport("kernel32.dll")] static extern int    GetCurrentThreadId();
 }

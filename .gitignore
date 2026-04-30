@@ -1,9 +1,15 @@
 bin/
 obj/
 dist/
+Backup/
 *.user
 .vs/
 *.onnx
 *.bin
 *.tar.bz2
 sherpa-onnx-nemo-ctc-giga-am-v2-russian-2025-04-19/
+sonar.json
+sonar.log
+silero_te_*.txt
+convert_silero_te.py
+Thumbs.db

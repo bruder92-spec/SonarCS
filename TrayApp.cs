@@ -1,11 +1,12 @@
+using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using NAudio.Wave;
 
-namespace VoiceTyper;
+namespace Sonar;
 
 /// <summary>
-/// Основной контекст приложения v2.
+/// Основной контекст приложения.
 ///
 /// Цвета иконки:
 ///   Синий  (#1E78FF) — готов
@@ -22,14 +23,13 @@ public sealed class TrayApp : ApplicationContext
     private static readonly Color CLR_RECOGNIZING = Color.FromArgb(220, 120,   0);
     private static readonly Color CLR_ERROR       = Color.FromArgb(180,   0, 180);
 
-    private readonly NotifyIcon _tray;
-    private AppConfig?         _config;
-    private VoskEngine?        _vosk;
-    private WhisperEngine?     _whisper;
-    private GigaAmEngine?      _gigaam;
-    private AudioCapture?      _audio;
-    private KeyboardHook?      _hook;
-    private bool               _settingsOpen;
+    private readonly NotifyIcon  _tray;
+    private AppConfig?           _config;
+    private GigaAmEngine?        _gigaam;
+    private DictionaryEngine?    _dict;
+    private AudioCapture?        _audio;
+    private KeyboardHook?        _hook;
+    private bool                 _settingsOpen;
 
     // ── очередь фраз ──────────────────────────────────────────────────────────
     private byte[]? _pendingPcm;        // PCM следующей фразы, ждёт завершения текущего распознавания
@@ -50,8 +50,8 @@ public sealed class TrayApp : ApplicationContext
         {
             Visible          = true,
             Icon             = MakeIcon(CLR_LOADING),
-            Text             = "Voice Typer: Загрузка…",
-            ContextMenuStrip = BuildMenu(engineLabel: "…", micLabel: "…"),
+            Text             = "Sonar: Загрузка…",
+            ContextMenuStrip = BuildMenu(micLabel: "…"),
         };
 
         _ = Task.Run(StartupAsync);
@@ -73,31 +73,22 @@ public sealed class TrayApp : ApplicationContext
                 _config.Save();
             }
 
+            Logger.Info($"Конфиг: микрофон={_config.MicrophoneDevice}, хоткей=0x{_config.HotkeyVk:X2}, " +
+                        $"dict_oil_gas={_config.DictOilGas}, dict_legal={_config.DictLegal}, dict_economy={_config.DictEconomy}");
             SetState(State.Loading, "Загрузка модели…");
 
-            if (_config.Engine == "whisper")
-            {
-                if (!File.Exists(AppConfig.WhisperModel))
-                    throw new FileNotFoundException("ggml-small.bin не найден", AppConfig.WhisperModel);
-                _whisper = new WhisperEngine(AppConfig.WhisperModel);
-                await Task.Run(_whisper.Load);
-            }
-            else if (_config.Engine == "gigaam")
-            {
-                if (!File.Exists(AppConfig.GigaAmV3Model))
-                    throw new FileNotFoundException("giga-am-v3.onnx не найден", AppConfig.GigaAmV3Model);
-                if (!File.Exists(AppConfig.GigaAmV3Vocab))
-                    throw new FileNotFoundException("giga-am-v3-vocab.txt не найден", AppConfig.GigaAmV3Vocab);
-                _gigaam = new GigaAmEngine();
-                await Task.Run(() => _gigaam.Load(AppConfig.GigaAmV3Model, AppConfig.GigaAmV3Vocab));
-            }
-            else
-            {
-                if (!Directory.Exists(AppConfig.VoskModelDir))
-                    throw new DirectoryNotFoundException($"Папка модели не найдена: {AppConfig.VoskModelDir}");
-                _vosk = new VoskEngine(AppConfig.VoskModelDir);
-                await Task.Run(_vosk.Load);
-            }
+            if (!File.Exists(AppConfig.GigaAmV3Model))
+                throw new FileNotFoundException("giga-am-v3.onnx не найден", AppConfig.GigaAmV3Model);
+            if (!File.Exists(AppConfig.GigaAmV3Vocab))
+                throw new FileNotFoundException("giga-am-v3-vocab.txt не найден", AppConfig.GigaAmV3Vocab);
+
+            Logger.Info("Загрузка GigaAM v3…");
+            var sw = Stopwatch.StartNew();
+            _gigaam = new GigaAmEngine();
+            await Task.Run(() => _gigaam.Load(AppConfig.GigaAmV3Model, AppConfig.GigaAmV3Vocab));
+            Logger.Info($"Модель загружена за {sw.ElapsedMilliseconds} мс");
+
+            _dict = new DictionaryEngine(_config.DictOilGas, _config.DictLegal, _config.DictEconomy);
 
             _audio = new AudioCapture(sampleRate: 16_000)
             {
@@ -108,27 +99,20 @@ public sealed class TrayApp : ApplicationContext
             _hook.Pressed  += OnKeyDown;
             _hook.Released += OnKeyUp;
 
-            string engineLabel = GetEngineLabel();
-            string micLabel    = GetMicName(_config.MicrophoneDevice);
-            _tray.ContextMenuStrip = BuildMenu(engineLabel, micLabel);
+            string micLabel = GetMicName(_config.MicrophoneDevice);
+            _tray.ContextMenuStrip = BuildMenu(micLabel);
 
-            SetState(State.Ready, $"Готов  [{engineLabel}]  [{micLabel}]");
+            SetState(State.Ready, "Готов  [GigaAM v3]");
+            Logger.Info($"Готов: GigaAM v3, микрофон: {micLabel}");
         }
         catch (Exception ex)
         {
+            Logger.Error("Ошибка инициализации", ex);
             Console.Error.WriteLine($"[init] {ex}");
             SetState(State.Error, "Ошибка инициализации");
-            MessageBox.Show(ex.Message, "Voice Typer — Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(ex.Message, "Sonar — Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
-
-    // ── метка движка ──────────────────────────────────────────────────────────
-    private string GetEngineLabel() => _config?.Engine switch
-    {
-        "whisper" => "Whisper Small" + (_whisper?.IsGpu == true ? " [GPU]" : " [CPU]"),
-        "gigaam"  => "GigaAM v3",
-        _         => "VOSK",
-    };
 
     // ── диалог первого запуска ────────────────────────────────────────────────
     private Task<AppConfig?> ShowFirstRunDialogAsync()
@@ -141,7 +125,6 @@ public sealed class TrayApp : ApplicationContext
             if (form.ShowDialog() == DialogResult.OK)
                 tcs.SetResult(new AppConfig
                 {
-                    Engine           = form.SelectedEngine,
                     MicrophoneDevice = form.SelectedMicDevice,
                 });
             else
@@ -169,7 +152,7 @@ public sealed class TrayApp : ApplicationContext
         _tray.Icon = MakeIcon(color);
         if (tip is not null)
         {
-            var text = $"Voice Typer: {tip}";
+            var text = $"Sonar: {tip}";
             _tray.Text = text.Length > 63 ? text[..63] : text;
         }
         old?.Dispose();
@@ -208,11 +191,11 @@ public sealed class TrayApp : ApplicationContext
     }
 
     // ── меню трея ─────────────────────────────────────────────────────────────
-    private ContextMenuStrip BuildMenu(string engineLabel, string micLabel)
+    private ContextMenuStrip BuildMenu(string micLabel)
     {
         var menu = new ContextMenuStrip();
 
-        menu.Items.Add($"Voice Typer  [{engineLabel}]").Enabled = false;
+        menu.Items.Add("Sonar  [GigaAM v3]").Enabled = false;
         menu.Items.Add(new ToolStripSeparator());
 
         var micItem = new ToolStripMenuItem($"Микрофон: {micLabel}");
@@ -223,6 +206,7 @@ public sealed class TrayApp : ApplicationContext
         var settingsItem = new ToolStripMenuItem("Настройки…", s_gearIcon, (_, _) => OpenSettings())
             { ImageScaling = ToolStripItemImageScaling.None };
         menu.Items.Add(settingsItem);
+        menu.Items.Add($"О программе  v{AppConfig.Version}", null, (_, _) => OpenAbout());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Выйти", null, (_, _) => Shutdown());
 
@@ -253,7 +237,7 @@ public sealed class TrayApp : ApplicationContext
         _config.MicrophoneDevice = deviceIndex;
         _config.Save();
         _audio.DeviceNumber = deviceIndex;
-        _tray.ContextMenuStrip = BuildMenu(GetEngineLabel(), GetMicName(deviceIndex));
+        _tray.ContextMenuStrip = BuildMenu(GetMicName(deviceIndex));
     }
 
     private static string GetMicName(int device)
@@ -280,6 +264,19 @@ public sealed class TrayApp : ApplicationContext
         sta.Start();
     }
 
+    private void OpenAbout()
+    {
+        var sta = new Thread(() =>
+        {
+            Application.EnableVisualStyles();
+            using var form = new AboutForm();
+            form.ShowDialog();
+        });
+        sta.SetApartmentState(ApartmentState.STA);
+        sta.IsBackground = true;
+        sta.Start();
+    }
+
     // ── обработка клавиши ─────────────────────────────────────────────────────
     private void OnKeyDown()
     {
@@ -287,12 +284,12 @@ public sealed class TrayApp : ApplicationContext
         lock (_lock)
         {
             normalRec = _state == State.Ready;
-            // начать запись «в очередь»: идёт распознавание, очередь пуста, запись не ведётся
             queuedRec = _state == State.Recognizing && !_capturingForQueue && _pendingPcm is null;
             if (!normalRec && !queuedRec) return;
             if (normalRec) _state = State.Recording;
             else           _capturingForQueue = true;
         }
+        Logger.Info($"KeyDown: {(normalRec ? "запись" : "запись в очередь")}");
         try
         {
             _audio!.StartRecording();
@@ -300,6 +297,7 @@ public sealed class TrayApp : ApplicationContext
         }
         catch (Exception ex)
         {
+            Logger.Error("Ошибка запуска микрофона", ex);
             lock (_lock)
             {
                 if (normalRec) _state = State.Ready;
@@ -308,11 +306,11 @@ public sealed class TrayApp : ApplicationContext
             if (normalRec)
             {
                 SetState(State.Error, "Ошибка микрофона");
-                _tray.BalloonTipTitle = "Voice Typer — Ошибка микрофона";
+                _tray.BalloonTipTitle = "Sonar — Ошибка микрофона";
                 _tray.BalloonTipText  = ex.Message;
                 _tray.BalloonTipIcon  = ToolTipIcon.Error;
                 _tray.ShowBalloonTip(4000);
-                _ = Task.Delay(4000).ContinueWith(_ => SetState(State.Ready, "Готов  [" + GetEngineLabel() + "]"));
+                _ = Task.Delay(4000).ContinueWith(_ => SetState(State.Ready, "Готов  [GigaAM v3]"));
             }
         }
     }
@@ -332,10 +330,9 @@ public sealed class TrayApp : ApplicationContext
                 _capturingForQueue = false;
                 var queued = _audio!.StopRecording();
                 if (_state == State.Recognizing)
-                    _pendingPcm = queued; // распознавание ещё идёт — отложить
+                    _pendingPcm = queued;
                 else
                 {
-                    // распознавание уже завершилось (state == Recording, выставленный в RecognizeAsync finally)
                     _state    = State.Recognizing;
                     launchPcm = queued;
                 }
@@ -344,6 +341,7 @@ public sealed class TrayApp : ApplicationContext
         }
         if (launchPcm is not null)
         {
+            Logger.Info($"KeyUp: {launchPcm.Length} байт ({launchPcm.Length / 2.0 / 16000:F2} сек)");
             SetState(State.Recognizing, "Распознавание…");
             _ = RecognizeAsync(launchPcm);
         }
@@ -351,29 +349,24 @@ public sealed class TrayApp : ApplicationContext
 
     private async Task RecognizeAsync(byte[] pcm)
     {
-        string engLabel = GetEngineLabel();
+        var sw = Stopwatch.StartNew();
         try
         {
             if (pcm.Length > 0)
             {
-                string text = _config?.Engine switch
-                {
-                    "whisper" => await _whisper!.TranscribeAsync(pcm),
-                    "gigaam"  => await Task.Run(() => _gigaam!.Transcribe(pcm)),
-                    _         => await Task.Run(() => _vosk!.Transcribe(pcm)),
-                };
+                string text = await Task.Run(() => _gigaam!.Transcribe(pcm));
+                text = _dict?.Apply(text) ?? text;
+
+                Logger.Info($"Результат [{sw.ElapsedMilliseconds} мс]: \"{(text.Length > 80 ? text[..80] + "…" : text)}\"");
 
                 if (!string.IsNullOrWhiteSpace(text))
-                {
-                    Console.WriteLine($"[{engLabel}] {text}");
                     TextTyper.Type(text + " ");
-                }
             }
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[recognition] {ex}");
-            _tray.BalloonTipTitle = "Voice Typer — Ошибка";
+            Logger.Error("Ошибка распознавания", ex);
+            _tray.BalloonTipTitle = "Sonar — Ошибка";
             _tray.BalloonTipText  = ex.Message;
             _tray.BalloonTipIcon  = ToolTipIcon.Error;
             _tray.ShowBalloonTip(5000);
@@ -390,24 +383,25 @@ public sealed class TrayApp : ApplicationContext
                 if (pending is null && !capturingNow)
                     _state = State.Ready;
                 else if (capturingNow)
-                    _state = State.Recording; // пользователь записывает следующую фразу
+                    _state = State.Recording;
             }
             if (pending is not null)
                 _ = RecognizeAsync(pending);
             else if (capturingNow)
                 SetState(State.Recording, "Запись…");
             else
-                SetState(State.Ready, $"Готов  [{engLabel}]");
+                SetState(State.Ready, "Готов  [GigaAM v3]");
         }
     }
 
     // ── завершение ────────────────────────────────────────────────────────────
     private void Shutdown()
     {
+        Logger.Info("Завершение приложения");
         _hook?.Dispose();
         _audio?.Dispose();
-        _whisper?.Dispose();
         _gigaam?.Dispose();
+        _overlay?.Dispose();
         _tray.Visible = false;
         _tray.Dispose();
         Application.Exit();
@@ -451,9 +445,9 @@ public sealed class TrayApp : ApplicationContext
         using var brush = new SolidBrush(Color.FromArgb(75, 95, 130));
         g.FillPath(brush, path);
 
-        // центральное отверстие — прозрачное
         g.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceCopy;
-        g.FillEllipse(new SolidBrush(Color.Transparent), Cx - Rh, Cy - Rh, Rh * 2, Rh * 2);
+        using var hole = new SolidBrush(Color.Transparent);
+        g.FillEllipse(hole, Cx - Rh, Cy - Rh, Rh * 2, Rh * 2);
 
         return bmp;
     }

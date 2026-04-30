@@ -1,25 +1,24 @@
 using NAudio.Wave;
 
-namespace VoiceTyper;
+namespace Sonar;
 
 /// <summary>
-/// Окно настроек Voice Typer.
-/// Секции: движок, микрофон, горячая клавиша, автозапуск.
-/// «Применить» сохраняет config.json и перезапускает процесс.
+/// Окно настроек Sonar.
+/// Секции: микрофон, горячая клавиша, автозапуск, словари замен.
+/// «Применить» сохраняет sonar.json и перезапускает процесс.
 /// Перехват горячей клавиши — через ProcessCmdKey (WM_KEYDOWN / WM_SYSKEYDOWN).
 /// </summary>
 public sealed class SettingsForm : Form
 {
     private readonly AppConfig _cfg;
 
-    private readonly RadioButton _rbVosk;
-    private readonly RadioButton _rbWhisper;
-    private readonly RadioButton _rbGigaAm3;
-    private readonly Label       _lblGpu;
-    private readonly ComboBox    _cbMic;
-    private readonly Button      _btnHotkey;
-    private readonly Label       _lblHotkeyHint;
-    private readonly CheckBox    _chkAutoStart;
+    private readonly ComboBox _cbMic;
+    private readonly Button   _btnHotkey;
+    private readonly Label    _lblHotkeyHint;
+    private readonly CheckBox _chkAutoStart;
+    private readonly CheckBox _chkOilGas;
+    private readonly CheckBox _chkLegal;
+    private readonly CheckBox _chkEconomy;
 
     private bool _capturing;
     private int  _capturedVk;
@@ -29,8 +28,8 @@ public sealed class SettingsForm : Form
         _cfg        = cfg;
         _capturedVk = cfg.HotkeyVk;
 
-        Text            = "Voice Typer — Настройки";
-        ClientSize      = new Size(460, 474);
+        Text            = "Sonar — Настройки";
+        ClientSize      = new Size(460, 468);
         StartPosition   = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox     = false;
@@ -39,56 +38,6 @@ public sealed class SettingsForm : Form
         KeyPreview      = true;
 
         int m = 20, y = m;
-
-        // ── Движок ────────────────────────────────────────────────────────────
-        Add(Header("Движок распознавания", ref y));
-
-        _rbVosk = Add(new RadioButton
-        {
-            Text     = "VOSK  —  быстрый, русский (88 МБ)",
-            Font     = new Font("Segoe UI", 10),
-            Checked  = cfg.Engine == "vosk",
-            Enabled  = Directory.Exists(AppConfig.VoskModelDir),
-            Location = new Point(m, y),
-            Size     = new Size(420, 22),
-        });
-        y += 26;
-
-        _rbGigaAm3 = Add(new RadioButton
-        {
-            Text     = "GigaAM v3  —  точнее, русский (225 МБ)",
-            Font     = new Font("Segoe UI", 10),
-            Checked  = cfg.Engine == "gigaam",
-            Enabled  = File.Exists(AppConfig.GigaAmV3Model) && File.Exists(AppConfig.GigaAmV3Vocab),
-            Location = new Point(m, y),
-            Size     = new Size(420, 22),
-        });
-        y += 26;
-
-        _rbWhisper = Add(new RadioButton
-        {
-            Text     = "Whisper  —  мультиязычный (466 МБ)",
-            Font     = new Font("Segoe UI", 10),
-            Checked  = cfg.Engine == "whisper",
-            Enabled  = File.Exists(AppConfig.WhisperModel),
-            Location = new Point(m, y),
-            Size     = new Size(420, 22),
-        });
-        y += 26;
-
-        bool gpu = WhisperEngine.IsVulkanAvailable();
-        _lblGpu = Add(new Label
-        {
-            Text      = gpu ? "  Ускорение: GPU (Vulkan обнаружен)"
-                            : "  Ускорение: CPU (Vulkan не обнаружен)",
-            Font      = new Font("Segoe UI", 9),
-            ForeColor = gpu ? Color.FromArgb(0, 140, 0) : Color.DimGray,
-            Location  = new Point(m + 18, y),
-            Size      = new Size(420, 18),
-        });
-        y += 22;
-
-        Add(Separator(ref y));
 
         // ── Микрофон ──────────────────────────────────────────────────────────
         Add(Header("Микрофон", ref y));
@@ -150,6 +99,26 @@ public sealed class SettingsForm : Form
             Location = new Point(m, y),
             Size     = new Size(420, 22),
         });
+        y += 30;
+
+        Add(Separator(ref y));
+
+        // ── Словари замен ─────────────────────────────────────────────────────
+        Add(Header("Словари замен", ref y));
+
+        _chkOilGas = Add(MakeDictCheckBox(
+            "Нефтегазовый  (ЭЦН, ГРП, НДПИ…)",
+            "dictionary_oil_gas.txt", cfg.DictOilGas, m, y));
+        y += 28;
+
+        _chkLegal = Add(MakeDictCheckBox(
+            "Юридический  (ГК, УК, ЕГРЮЛ…)",
+            "dictionary_legal.txt", cfg.DictLegal, m, y));
+        y += 28;
+
+        _chkEconomy = Add(MakeDictCheckBox(
+            "Экономика / Финансы / Бухгалтерия  (НДС, ФОТ, МРОТ…)",
+            "dictionary_economy.txt", cfg.DictEconomy, m, y));
         y += 28;
 
         // ── Кнопки ────────────────────────────────────────────────────────────
@@ -234,9 +203,11 @@ public sealed class SettingsForm : Form
     // ── Применить ─────────────────────────────────────────────────────────────
     private void BtnApply_Click(object? sender, EventArgs e)
     {
-        _cfg.Engine           = _rbWhisper.Checked ? "whisper" : _rbGigaAm3.Checked ? "gigaam" : "vosk";
         _cfg.MicrophoneDevice = _cbMic.SelectedIndex - 1;
         _cfg.HotkeyVk         = _capturedVk;
+        _cfg.DictOilGas       = _chkOilGas.Checked;
+        _cfg.DictLegal        = _chkLegal.Checked;
+        _cfg.DictEconomy      = _chkEconomy.Checked;
         _cfg.Save();
 
         if (_chkAutoStart.Checked) AutoStartManager.Enable();
@@ -275,6 +246,21 @@ public sealed class SettingsForm : Form
 
     // ── Вспомогательные методы построения UI ─────────────────────────────────
     private T Add<T>(T ctrl) where T : Control { Controls.Add(ctrl); return ctrl; }
+
+    private static CheckBox MakeDictCheckBox(string label, string filename, bool cfgValue, int m, int y)
+    {
+        bool exists = File.Exists(Path.Combine(AppContext.BaseDirectory, filename));
+        return new CheckBox
+        {
+            Text      = exists ? label : $"{label}  (файл не найден)",
+            Font      = new Font("Segoe UI", 10),
+            Checked   = cfgValue && exists,
+            Enabled   = exists,
+            ForeColor = exists ? SystemColors.ControlText : Color.DimGray,
+            Location  = new Point(m, y),
+            Size      = new Size(420, 22),
+        };
+    }
 
     private Label Header(string text, ref int y)
     {

@@ -1,11 +1,11 @@
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
-namespace VoiceTyper;
+namespace Sonar;
 
 /// <summary>
 /// GigaAM v3 — прямой ONNX-инференс без sherpa-onnx прослойки.
-/// Модель: istupakov/gigaam-v3-onnx → v3_e2e_ctc.int8.onnx (225 МБ, WER ≈ 3.3%).
+/// Модель: istupakov/gigaam-v3-onnx → v3_e2e_ctc.int8.onnx (215 МБ, WER ≈ 3.3%).
 /// E2E-модель: выдаёт текст с пунктуацией, заглавными буквами и цифрами.
 ///
 /// Preprocessing: n_fft=320, hop=160, 64 mel-фильтра HTK, center=false,

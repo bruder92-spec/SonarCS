@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace VoiceTyper;
+namespace Sonar;
 
 /// <summary>
 /// Вставляет текст в активное окно через буфер обмена + Ctrl+V.
@@ -24,6 +24,7 @@ public static class TextTyper
 
     public static void Type(string text)
     {
+        Logger.Info($"TextTyper: вставка {text.Length} симв.");
         var sta = new Thread(() =>
         {
             IDataObject? prev = null;
@@ -42,6 +43,11 @@ public static class TextTyper
                 keybd_event(VK_CONTROL, 0, KEYEVENTF_UP, UIntPtr.Zero);
 
                 Thread.Sleep(200);
+                Logger.Info("TextTyper: Ctrl+V отправлен");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("TextTyper: ошибка вставки", ex);
             }
             finally
             {
@@ -59,5 +65,6 @@ public static class TextTyper
         sta.IsBackground = true;
         sta.Start();
         sta.Join(millisecondsTimeout: 2000);
+        Logger.Info("TextTyper: поток завершён");
     }
 }

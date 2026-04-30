@@ -1,4 +1,4 @@
-namespace VoiceTyper;
+namespace Sonar;
 
 /// <summary>
 /// Полупрозрачная плашка поверх всех окон, следующая за курсором мыши.

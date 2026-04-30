@@ -1,14 +1,14 @@
 using Microsoft.Win32;
 
-namespace VoiceTyper;
+namespace Sonar;
 
 /// <summary>
 /// Управляет записью автозапуска в реестре текущего пользователя.
-/// HKCU\Software\Microsoft\Windows\CurrentVersion\Run → VoiceTyper = "путь к exe"
+/// HKCU\Software\Microsoft\Windows\CurrentVersion\Run → Sonar = "путь к exe"
 /// </summary>
 public static class AutoStartManager
 {
-    private const string KeyName = "VoiceTyper";
+    private const string KeyName = "Sonar";
     private const string RegPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
     private static string ExePath =>

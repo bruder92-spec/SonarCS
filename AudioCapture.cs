@@ -1,6 +1,6 @@
 using NAudio.Wave;
 
-namespace VoiceTyper;
+namespace Sonar;
 
 /// <summary>
 /// Захват звука с выбранного микрофона через NAudio.
@@ -13,7 +13,7 @@ public sealed class AudioCapture : IDisposable
     private WaveInEvent?          _waveIn;
     private readonly List<byte[]> _chunks = [];
     private readonly object       _lock   = new();
-    private bool                  _active;
+    private volatile bool         _active;
 
     /// <summary>Индекс устройства: -1 = по умолчанию, 0..N = конкретный микрофон.</summary>
     public int DeviceNumber { get; set; } = -1;
