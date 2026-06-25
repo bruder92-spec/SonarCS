@@ -13,3 +13,7 @@ sonar.log
 silero_te_*.txt
 convert_silero_te.py
 Thumbs.db
+*.zip
+*.gguf
+commands_prompt.txt
+CommandEngine.cs

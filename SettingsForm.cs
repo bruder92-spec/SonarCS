@@ -19,6 +19,8 @@ public sealed class SettingsForm : Form
     private readonly CheckBox _chkOilGas;
     private readonly CheckBox _chkLegal;
     private readonly CheckBox _chkEconomy;
+    private readonly CheckBox _chkCommands;
+    private readonly TextBox  _txtTriggerWord;
 
     private bool _capturing;
     private int  _capturedVk;
@@ -29,7 +31,7 @@ public sealed class SettingsForm : Form
         _capturedVk = cfg.HotkeyVk;
 
         Text            = "Sonar — Настройки";
-        ClientSize      = new Size(460, 468);
+        ClientSize      = new Size(460, 600);
         StartPosition   = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox     = false;
@@ -121,6 +123,49 @@ public sealed class SettingsForm : Form
             "dictionary_economy.txt", cfg.DictEconomy, m, y));
         y += 28;
 
+        Add(Separator(ref y));
+
+        // ── Голосовые команды ─────────────────────────────────────────────────
+        Add(Header("Голосовые команды", ref y));
+
+        _chkCommands = Add(new CheckBox
+        {
+            Text     = "Включить управление компьютером голосом",
+            Font     = new Font("Segoe UI", 10),
+            Checked  = cfg.CommandsEnabled,
+            Location = new Point(m, y),
+            Size     = new Size(420, 22),
+        });
+        y += 28;
+
+        Add(new Label
+        {
+            Text      = "Слово-триггер:",
+            Font      = new Font("Segoe UI", 9),
+            ForeColor = Color.DimGray,
+            Location  = new Point(m, y),
+            Size      = new Size(130, 18),
+        });
+        _txtTriggerWord = Add(new TextBox
+        {
+            Text     = cfg.TriggerWord,
+            Font     = new Font("Segoe UI", 10),
+            Location = new Point(m + 135, y - 2),
+            Size     = new Size(150, 24),
+        });
+        y += 32;
+
+        Add(new Label
+        {
+            Text      = "Скажите «компьютер, открой браузер» — Sonar выполнит команду.\n" +
+                        "Примеры: «запусти хром», «выключи компьютер», «сделай тише».",
+            Font      = new Font("Segoe UI", 9, FontStyle.Italic),
+            ForeColor = Color.DimGray,
+            Location  = new Point(m, y),
+            Size      = new Size(420, 34),
+        });
+        y += 38;
+
         // ── Кнопки ────────────────────────────────────────────────────────────
         var btnApply = new Button
         {
@@ -208,6 +253,9 @@ public sealed class SettingsForm : Form
         _cfg.DictOilGas       = _chkOilGas.Checked;
         _cfg.DictLegal        = _chkLegal.Checked;
         _cfg.DictEconomy      = _chkEconomy.Checked;
+        _cfg.CommandsEnabled  = _chkCommands.Checked;
+        _cfg.TriggerWord      = string.IsNullOrWhiteSpace(_txtTriggerWord.Text)
+                                ? "компьютер" : _txtTriggerWord.Text.Trim().ToLower();
         _cfg.Save();
 
         if (_chkAutoStart.Checked) AutoStartManager.Enable();

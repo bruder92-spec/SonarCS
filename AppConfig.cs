@@ -9,7 +9,7 @@ namespace Sonar;
 /// </summary>
 public sealed class AppConfig
 {
-    public const string Version = "1.2";  // отображается в меню трея и окне «О программе»
+    public const string Version = "2.1";  // отображается в меню трея и окне «О программе»
 
     [JsonPropertyName("microphone_device")]
     public int MicrophoneDevice { get; set; } = -1;        // -1 = системный по умолчанию
@@ -25,6 +25,12 @@ public sealed class AppConfig
 
     [JsonPropertyName("dict_economy")]
     public bool DictEconomy { get; set; } = false;
+
+    [JsonPropertyName("commands_enabled")]
+    public bool CommandsEnabled { get; set; } = false;
+
+    [JsonPropertyName("trigger_word")]
+    public string TriggerWord { get; set; } = "компьютер";
 
     // ── пути к файлам модели (относительно exe) ───────────────────────────────
     public static string GigaAmV3Model => Path.Combine(AppContext.BaseDirectory, "giga-am-v3.onnx");

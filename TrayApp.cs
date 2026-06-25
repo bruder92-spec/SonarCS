@@ -17,11 +17,13 @@ namespace Sonar;
 /// </summary>
 public sealed class TrayApp : ApplicationContext
 {
-    private static readonly Color CLR_LOADING     = Color.Gray;
-    private static readonly Color CLR_READY       = Color.FromArgb(30,  120, 255);
-    private static readonly Color CLR_RECORDING   = Color.FromArgb(220,  40,  40);
-    private static readonly Color CLR_RECOGNIZING = Color.FromArgb(220, 120,   0);
-    private static readonly Color CLR_ERROR       = Color.FromArgb(180,   0, 180);
+    private static readonly Color CLR_LOADING          = Color.Gray;
+    private static readonly Color CLR_READY            = Color.FromArgb( 30, 120, 255);
+    private static readonly Color CLR_RECORDING        = Color.FromArgb(220,  40,  40);
+    private static readonly Color CLR_RECOGNIZING      = Color.FromArgb(220, 120,   0);
+    private static readonly Color CLR_CMD_RECORDING    = Color.FromArgb( 40, 180,  60);
+    private static readonly Color CLR_CMD_EXECUTING    = Color.FromArgb(  0, 190, 180);
+    private static readonly Color CLR_ERROR            = Color.FromArgb(180,   0, 180);
 
     private readonly NotifyIcon  _tray;
     private AppConfig?           _config;
@@ -40,7 +42,7 @@ public sealed class TrayApp : ApplicationContext
 
     private static readonly Image s_gearIcon = MakeGearIcon();
 
-    private enum State { Loading, Ready, Recording, Recognizing, Error }
+    private enum State { Loading, Ready, Recording, Recognizing, CommandRecording, CommandExecuting, Error }
     private volatile State _state = State.Loading;
     private readonly object _lock = new();
 
@@ -142,11 +144,13 @@ public sealed class TrayApp : ApplicationContext
         _state = s;
         Color color = s switch
         {
-            State.Ready       => CLR_READY,
-            State.Recording   => CLR_RECORDING,
-            State.Recognizing => CLR_RECOGNIZING,
-            State.Error       => CLR_ERROR,
-            _                 => CLR_LOADING,
+            State.Ready             => CLR_READY,
+            State.Recording         => CLR_RECORDING,
+            State.Recognizing       => CLR_RECOGNIZING,
+            State.CommandRecording  => CLR_CMD_RECORDING,
+            State.CommandExecuting  => CLR_CMD_EXECUTING,
+            State.Error             => CLR_ERROR,
+            _                       => CLR_LOADING,
         };
         var old = _tray.Icon;
         _tray.Icon = MakeIcon(color);
@@ -166,9 +170,11 @@ public sealed class TrayApp : ApplicationContext
         {
             switch (s)
             {
-                case State.Recording:   _overlay.ShowRecording();   break;
-                case State.Recognizing: _overlay.ShowRecognizing(); break;
-                default:                _overlay.HideOverlay();     break;
+                case State.Recording:          _overlay.ShowRecording();         break;
+                case State.Recognizing:        _overlay.ShowRecognizing();       break;
+                case State.CommandRecording:   _overlay.ShowCommandRecording();  break;
+                case State.CommandExecuting:   _overlay.ShowCommandExecuting();  break;
+                default:                       _overlay.HideOverlay();           break;
             }
         });
     }
@@ -306,10 +312,8 @@ public sealed class TrayApp : ApplicationContext
             if (normalRec)
             {
                 SetState(State.Error, "Ошибка микрофона");
-                _tray.BalloonTipTitle = "Sonar — Ошибка микрофона";
-                _tray.BalloonTipText  = ex.Message;
-                _tray.BalloonTipIcon  = ToolTipIcon.Error;
-                _tray.ShowBalloonTip(4000);
+                if (_overlay is not null && _overlay.IsHandleCreated)
+                    _overlay.BeginInvoke(() => _overlay.ShowError("✗ Ошибка микрофона"));
                 _ = Task.Delay(4000).ContinueWith(_ => SetState(State.Ready, "Готов  [GigaAM v3]"));
             }
         }
@@ -355,21 +359,28 @@ public sealed class TrayApp : ApplicationContext
             if (pcm.Length > 0)
             {
                 string text = await Task.Run(() => _gigaam!.Transcribe(pcm));
-                text = _dict?.Apply(text) ?? text;
 
                 Logger.Info($"Результат [{sw.ElapsedMilliseconds} мс]: \"{(text.Length > 80 ? text[..80] + "…" : text)}\"");
 
                 if (!string.IsNullOrWhiteSpace(text))
-                    TextTyper.Type(text + " ");
+                {
+                    if (_config!.CommandsEnabled && StartsWithTrigger(text, out string commandText))
+                    {
+                        await ExecuteCommandAsync(commandText);
+                    }
+                    else
+                    {
+                        text = _dict?.Apply(text) ?? text;
+                        TextTyper.Type(text + " ");
+                    }
+                }
             }
         }
         catch (Exception ex)
         {
             Logger.Error("Ошибка распознавания", ex);
-            _tray.BalloonTipTitle = "Sonar — Ошибка";
-            _tray.BalloonTipText  = ex.Message;
-            _tray.BalloonTipIcon  = ToolTipIcon.Error;
-            _tray.ShowBalloonTip(5000);
+            if (_overlay is not null && _overlay.IsHandleCreated)
+                _overlay.BeginInvoke(() => _overlay.ShowError("✗ Ошибка распознавания"));
         }
         finally
         {
@@ -391,6 +402,52 @@ public sealed class TrayApp : ApplicationContext
                 SetState(State.Recording, "Запись…");
             else
                 SetState(State.Ready, "Готов  [GigaAM v3]");
+        }
+    }
+
+    // ── триггер-детектор ──────────────────────────────────────────────────────
+    private bool StartsWithTrigger(string text, out string commandText)
+    {
+        commandText = string.Empty;
+        string trigger  = IntentMatcher.Normalize((_config?.TriggerWord ?? "компьютер").Trim().ToLowerInvariant());
+        string textLow  = IntentMatcher.Normalize(text.Trim().ToLowerInvariant());
+
+        if (!textLow.StartsWith(trigger)) return false;
+
+        // Обрезаем слово-триггер и ведущую пунктуацию/пробелы
+        string rest = text.Trim()[trigger.Length..].TrimStart(',', '.', ':', ';', '!', ' ');
+        if (string.IsNullOrWhiteSpace(rest)) return false;
+
+        commandText = rest.Trim();
+        return true;
+    }
+
+    // ── выполнение голосовой команды ──────────────────────────────────────────
+    private async Task ExecuteCommandAsync(string commandText)
+    {
+        try
+        {
+            SetState(State.CommandExecuting, "Выполнение команды…");
+            Logger.Info($"Команда: \"{commandText}\"");
+
+            var result = await Task.Run(() => IntentMatcher.Match(commandText));
+            Logger.Info($"CommandResult: action={result.Action}");
+
+            if (result.Action == "unknown")
+            {
+                Logger.UnknownCommand(commandText);
+                if (_overlay is not null && _overlay.IsHandleCreated)
+                    _overlay.BeginInvoke(() => _overlay.ShowCommandError(commandText));
+                return;
+            }
+
+            await Task.Run(() => CommandExecutor.Execute(result));
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("ExecuteCommandAsync", ex);
+            if (_overlay is not null && _overlay.IsHandleCreated)
+                _overlay.BeginInvoke(() => _overlay.ShowError("✗ Ошибка команды"));
         }
     }
 

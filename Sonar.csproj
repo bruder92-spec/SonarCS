@@ -11,7 +11,7 @@
     <RootNamespace>Sonar</RootNamespace>
     <PlatformTarget>x64</PlatformTarget>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
-    <Version>1.2.0</Version>
+    <Version>2.1.0</Version>
     <Copyright>Copyright © 2026 Varzakov Stanislav</Copyright>
   </PropertyGroup>
 
@@ -26,7 +26,7 @@
     <None Include="!readme.txt"  CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
   </ItemGroup>
 
-  <!-- GigaAM v3 e2e model (215 MB) + vocabulary. Conditional: build does not fail if files are absent. -->
+<!-- GigaAM v3 e2e model (215 MB) + vocabulary. Conditional: build does not fail if files are absent. -->
   <!-- Model: https://huggingface.co/istupakov/gigaam-v3-onnx/resolve/main/v3_e2e_ctc.int8.onnx -->
   <!-- Vocab:  https://huggingface.co/istupakov/gigaam-v3-onnx/resolve/main/v3_e2e_ctc_vocab.txt  -->
   <ItemGroup>
