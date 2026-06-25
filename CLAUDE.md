@@ -28,7 +28,7 @@
 
 ---
 
-## Текущее состояние — v2.1
+## Текущее состояние — v2.2
 
 Директория `c:\Users\Zver\Documents\Claude\SonarCS\` — актуальный исходник.
 
@@ -39,6 +39,7 @@
 | v1.2 | 2026-06-18 | Лицензия GigaAM уточнена (MIT), README для GitHub |
 | v2.0 | 2026-06-22 | Режим голосовых команд: IntentMatcher, CommandExecutor, CommandsForm |
 | v2.1 | 2026-06-25 | Нормализация в StartsWithTrigger, сортировка SimpleRulesN, удалён ShowBalloonTip |
+| v2.2 | 2026-06-25 | commands_user.txt (пользовательские команды), AppDiscovery (Start Menu + fuzzy) |
 
 Бэкапы: `Backup\V1.0\`, `Backup\V1.1\`, `Backup\V1.2\`, `Backup\V2.0\`, `Backup\V2.1\`
 
@@ -88,7 +89,9 @@ NAudio WaveInEvent. `DeviceNumber = -1` передаётся напрямую (W
   правила проверяются первыми, короткие не перехватывают более специфичные совпадения.
 - `AppNames` — канонический список приложений для `CommandsForm` (единственный источник истины).
   При добавлении приложения обновлять `AppNames`, `LaunchApps` и `CommandExecutor.AppAliases`.
-- Порядок матчинга: `TryLaunch` → `TryOpenFolder` → `TrySetVolume` → `TryTypeText` → `TrySimple`.
+- `UserCommands` — загружается из `commands_user.txt` при старте; наивысший приоритет.
+  Формат: `фраза = URL/путь`. Действие `shell_open`, исполняется через `ShellOpen`.
+- Порядок матчинга: `TryUserCommand` → `TryLaunch` → `TryOpenFolder` → `TrySetVolume` → `TryTypeText` → `TrySimple` → `TryAutoLaunch`.
 
 ### CommandExecutor — исполнение команд
 Статический класс. Принимает `CommandResult`, исполняет через `SendInput`/`keybd_event`,
@@ -99,9 +102,24 @@ NAudio WaveInEvent. `DeviceNumber = -1` передаётся напрямую (W
 ### CommandResult — структура результата матчинга
 `Action` (string) + `Args` (Dictionary<string,string>). Метод `Arg(key)` — безопасное получение аргумента.
 
+### AppDiscovery — автосканирование Start Menu
+Статический класс, инициализируется лениво (Lazy) при первом обращении.
+- `Scan()` — перечисляет `.lnk`-файлы из `%APPDATA%\…\Start Menu\Programs` и `%ProgramData%\…`.
+  Пропускает ярлыки с ключевыми словами «uninstall», «help», «readme» и т.д.
+- `Transliterate(string)` — фонетическая транслитерация рус → лат: «фотошоп» → «fotoshop».
+- `Levenshtein(a, b)` — стандартный DP O(n·m).
+- `TryMatch(query, out lnkPath)` — разбивает запрос на слова, для каждого слова ищет
+  минимальное расстояние среди слов имени приложения; порог: ≤3 букв → 0, 4–5 → 1, 6+ → 2.
+  Совпадение логируется в `sonar.log` с именем приложения и score.
+- Запуск обнаруженного приложения: `Process.Start(lnkPath, UseShellExecute=true)` —
+  резолвить `.lnk` не нужно, Windows делает это сам.
+- `AppCount` — число найденных ярлыков; отображается в заголовке раздела в `CommandsForm`.
+
 ### CommandsForm — список голосовых команд
-RichTextBox с категоризированным списком команд. Раздел «Приложения» генерируется из
-`IntentMatcher.AppNames` — всегда актуален без ручной синхронизации.
+RichTextBox с категоризированным списком команд.
+- Раздел «Пользовательские команды ★» — показывается первым если существует `commands_user.txt`;
+  заголовок выделен тёмно-жёлтым цветом, записи показывают `фраза → цель`.
+- Раздел «Приложения» генерируется из `IntentMatcher.AppNames` + счётчик из `AppDiscovery.AppCount`.
 Открывается через STA-поток из `CommandExecutor.OpenCommandsWindow()`.
 
 ### Оверлей у курсора
@@ -153,10 +171,11 @@ RichTextBox с категоризированным списком команд.
 | AudioCapture.cs | NAudio WaveInEvent, захват PCM 16 кГц |
 | GigaAmEngine.cs | OnnxRuntime, e2e CTC, кастомный DFT, 257-токенный vocab |
 | DictionaryEngine.cs | Постпроцессинг — словари замен, проверка границ слов |
-| IntentMatcher.cs | Мгновенный матчинг команд (~0 мс): Normalize, LaunchApps, FolderRules, SimpleRules |
+| IntentMatcher.cs | Мгновенный матчинг команд: UserCommands, Normalize, LaunchApps, SimpleRules, TryAutoLaunch |
+| AppDiscovery.cs | Сканирование Start Menu, транслитерация рус→лат, fuzzy-матчинг Левенштейном |
 | CommandResult.cs | Структура результата матчинга: Action + Args |
-| CommandExecutor.cs | Исполнение 100+ команд Windows; открытие CommandsForm |
-| CommandsForm.cs | Окно со списком голосовых команд; Приложения из IntentMatcher.AppNames |
+| CommandExecutor.cs | Исполнение 100+ команд Windows; shell_open, auto_launch; открытие CommandsForm |
+| CommandsForm.cs | Список команд: пользовательские ★, встроенные, счётчик Start Menu |
 | TextTyper.cs | Вставка текста через STA + Clipboard + Ctrl+V |
 | FirstRunForm.cs | Диалог выбора микрофона при первом запуске |
 | SettingsForm.cs | Настройки (микрофон, хоткей, автозапуск, словари, режим команд, триггер) |
@@ -197,3 +216,6 @@ dotnet publish Sonar.csproj --configuration Release --runtime win-x64 --self-con
 - **SimpleRulesN порядок**: массив сортируется по убыванию длины — не убирать OrderByDescending, иначе короткие ключи начнут перехватывать длинные.
 - **Normalize в StartsWithTrigger**: триггер и входной текст нормализуются через IntentMatcher.Normalize() — без этого триггер не срабатывает при смешанном скрипте GigaAM.
 - **Три места при добавлении приложения**: IntentMatcher.AppNames + IntentMatcher.LaunchApps + CommandExecutor.AppAliases.
+- **AppDiscovery ленивый**: `_apps` инициализируется при первом `TryMatch` или `AppCount`. Первый вызов занимает ~10 мс на сканирование Start Menu — нормально.
+- **commands_user.txt загружается один раз**: изменения файла требуют перезапуска приложения.
+- **Порог Левенштейна по длине слова**: ≤3 букв → 0 (точное совпадение), 4–5 → 1, 6+ → 2. Короткие запросы фильтруются `w.Length >= 2`. Ложные срабатывания логируются в sonar.log для анализа.

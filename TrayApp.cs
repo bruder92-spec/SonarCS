@@ -76,7 +76,8 @@ public sealed class TrayApp : ApplicationContext
             }
 
             Logger.Info($"Конфиг: микрофон={_config.MicrophoneDevice}, хоткей=0x{_config.HotkeyVk:X2}, " +
-                        $"dict_oil_gas={_config.DictOilGas}, dict_legal={_config.DictLegal}, dict_economy={_config.DictEconomy}");
+                        $"dict_oil_gas={_config.DictOilGas}, dict_legal={_config.DictLegal}, dict_economy={_config.DictEconomy}, " +
+                        $"commands={_config.CommandsEnabled}, trigger=\"{_config.TriggerWord}\"");
             SetState(State.Loading, "Загрузка модели…");
 
             if (!File.Exists(AppConfig.GigaAmV3Model))
@@ -89,6 +90,9 @@ public sealed class TrayApp : ApplicationContext
             _gigaam = new GigaAmEngine();
             await Task.Run(() => _gigaam.Load(AppConfig.GigaAmV3Model, AppConfig.GigaAmV3Vocab));
             Logger.Info($"Модель загружена за {sw.ElapsedMilliseconds} мс");
+
+            if (_config.CommandsEnabled)
+                _ = Task.Run(() => _ = AppDiscovery.AppCount);
 
             _dict = new DictionaryEngine(_config.DictOilGas, _config.DictLegal, _config.DictEconomy);
 

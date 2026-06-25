@@ -9,7 +9,7 @@ namespace Sonar;
 /// </summary>
 public sealed class AppConfig
 {
-    public const string Version = "2.1";  // отображается в меню трея и окне «О программе»
+    public const string Version = "2.2";  // отображается в меню трея и окне «О программе»
 
     [JsonPropertyName("microphone_device")]
     public int MicrophoneDevice { get; set; } = -1;        // -1 = системный по умолчанию
@@ -35,6 +35,10 @@ public sealed class AppConfig
     // ── пути к файлам модели (относительно exe) ───────────────────────────────
     public static string GigaAmV3Model => Path.Combine(AppContext.BaseDirectory, "giga-am-v3.onnx");
     public static string GigaAmV3Vocab => Path.Combine(AppContext.BaseDirectory, "giga-am-v3-vocab.txt");
+
+    // ── пути к пользовательским файлам команд ─────────────────────────────────
+    public static string CommandsDir      => Path.Combine(AppContext.BaseDirectory, "commands");
+    public static string CommandsUserFile => Path.Combine(CommandsDir, "commands_user.txt");
 
     // ── загрузка / сохранение ─────────────────────────────────────────────────
     private static string ConfigPath => Path.Combine(AppContext.BaseDirectory, "sonar.json");

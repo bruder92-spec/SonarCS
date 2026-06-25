@@ -23,12 +23,61 @@ public static class IntentMatcher
         string original = text.Trim();
         string t = Normalize(original.ToLowerInvariant());
 
-        return TryLaunch(t)
+        return TryUserCommand(t)
+            ?? TryLaunch(t)
             ?? TryOpenFolder(t)
             ?? TrySetVolume(t)
             ?? TryTypeText(t, original)
             ?? TrySimple(t)
+            ?? TryAutoLaunch(t)
             ?? Unknown();
+    }
+
+    // ── Пользовательские команды (commands_user.txt) ───────────────────────────
+
+    private static readonly (string KeywordN, string Target)[] UserCommands = LoadUserCommands();
+
+    private static (string KeywordN, string Target)[] LoadUserCommands()
+    {
+        var path = AppConfig.CommandsUserFile;
+        if (!File.Exists(path)) return [];
+
+        return File.ReadAllLines(path, System.Text.Encoding.UTF8)
+            .Where(l => !string.IsNullOrWhiteSpace(l) && !l.TrimStart().StartsWith('#'))
+            .Select(l => l.Split('=', 2))
+            .Where(p => p.Length == 2 && p[0].Trim().Length > 0 && p[1].Trim().Length > 0)
+            .Select(p => (KeywordN: Normalize(p[0].Trim().ToLowerInvariant()), Target: p[1].Trim()))
+            .OrderByDescending(r => r.KeywordN.Length)
+            .ToArray();
+    }
+
+    private static CommandResult? TryUserCommand(string t)
+    {
+        foreach (var (keyword, target) in UserCommands)
+            if (t.StartsWith(keyword))
+                return Cmd("shell_open", "target", target);
+        return null;
+    }
+
+    // ── Автозапуск из Start Menu (fallback) ───────────────────────────────────
+
+    private static CommandResult? TryAutoLaunch(string t)
+    {
+        string? appQuery = null;
+        foreach (var verb in LaunchVerbsN)
+        {
+            int idx = t.IndexOf(verb, StringComparison.Ordinal);
+            if (idx >= 0)
+            {
+                appQuery = t[(idx + verb.Length)..].Trim().TrimStart(',', ':');
+                break;
+            }
+        }
+        if (string.IsNullOrWhiteSpace(appQuery)) return null;
+
+        return AppDiscovery.TryMatch(appQuery, out string lnkPath)
+            ? Cmd("auto_launch", "path", lnkPath)
+            : null;
     }
 
     // ── Запуск приложения ──────────────────────────────────────────────────────

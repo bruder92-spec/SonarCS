@@ -43,12 +43,32 @@ public sealed class CommandsForm : Form
 
     private static void FillCommands(RichTextBox rtb)
     {
-        // Раздел "Приложения" берётся из IntentMatcher.AppNames — всегда актуален
-        var appItems = IntentMatcher.AppNames.Select(a => $"запусти {a}").ToArray();
+        var sections = new List<(string Title, string[] Items)>();
 
-        var sections = new (string Title, string[] Items)[]
+        // Пользовательские команды из commands_user.txt — первыми (наивысший приоритет)
+        var userCmdsPath = AppConfig.CommandsUserFile;
+        if (File.Exists(userCmdsPath))
         {
-            ("Приложения", appItems),
+            var userItems = File.ReadAllLines(userCmdsPath, System.Text.Encoding.UTF8)
+                .Where(l => !string.IsNullOrWhiteSpace(l) && !l.TrimStart().StartsWith('#'))
+                .Select(l => l.Split('=', 2))
+                .Where(p => p.Length == 2 && p[0].Trim().Length > 0 && p[1].Trim().Length > 0)
+                .Select(p => $"{p[0].Trim()}  →  {p[1].Trim()}")
+                .ToArray();
+            if (userItems.Length > 0)
+                sections.Add(("Пользовательские команды ★", userItems));
+        }
+
+        // Встроенные приложения из IntentMatcher.AppNames
+        var appItems = IntentMatcher.AppNames.Select(a => $"запусти {a}").ToArray();
+        int autoCount = AppDiscovery.AppCount;
+        string appTitle = autoCount > 0
+            ? $"Приложения (встроенные + {autoCount} из Start Menu)"
+            : "Приложения";
+
+        sections.AddRange(new (string Title, string[] Items)[]
+        {
+            (appTitle, appItems),
             ("Папки", [
                 "открой документы",
                 "открой загрузки",
@@ -160,7 +180,7 @@ public sealed class CommandsForm : Form
                 "список команд",
                 "что ты умеешь",
             ]),
-        };
+        });
 
         bool first = true;
         foreach (var (title, items) in sections)
@@ -172,7 +192,9 @@ public sealed class CommandsForm : Form
             rtb.AppendText(title + "\n");
             rtb.Select(start, title.Length);
             rtb.SelectionFont  = new Font("Segoe UI", 10, FontStyle.Bold);
-            rtb.SelectionColor = Color.FromArgb(30, 80, 180);
+            rtb.SelectionColor = title.Contains('★')
+                ? Color.FromArgb(160, 100, 0)
+                : Color.FromArgb(30, 80, 180);
 
             foreach (var item in items)
             {

@@ -39,6 +39,8 @@ public static class CommandExecutor
                 case "open_folder":      OpenFolder(cmd.Arg("folder")); break;
                 case "open_file":        OpenFile(cmd.Arg("file")); break;
                 case "open_recycle_bin": ShellOpen("shell:RecycleBinFolder"); break;
+                case "shell_open":       ShellOpen(cmd.Arg("target")); break;
+                case "auto_launch":      ShellOpen(cmd.Arg("path")); break;
 
                 // ── звук и медиа ───────────────────────────────────────────
                 case "volume_up":        AdjustVolume(+0.1f); break;
