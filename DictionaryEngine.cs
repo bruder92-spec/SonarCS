@@ -24,16 +24,15 @@ public sealed class DictionaryEngine
 
     public DictionaryEngine(bool oilGas, bool legal, bool economy)
     {
-        if (oilGas)   Load("dictionary_oil_gas.txt");
-        if (legal)    Load("dictionary_legal.txt");
-        if (economy)  Load("dictionary_economy.txt");
-        Load("dictionary_user.txt");
+        if (oilGas)   Load(AppConfig.DictOilGasFile);
+        if (legal)    Load(AppConfig.DictLegalFile);
+        if (economy)  Load(AppConfig.DictEconomyFile);
+        Load(AppConfig.DictUserFile);
         _entries.Sort((a, b) => b.Key.Length.CompareTo(a.Key.Length));
     }
 
-    private void Load(string filename)
+    private void Load(string path)
     {
-        string path = Path.Combine(AppContext.BaseDirectory, filename);
         if (!File.Exists(path)) return;
         try
         {
@@ -51,7 +50,7 @@ public sealed class DictionaryEngine
         }
         catch (Exception ex)
         {
-            Logger.Warn($"DictionaryEngine: не удалось загрузить {filename}: {ex.Message}");
+            Logger.Warn($"DictionaryEngine: не удалось загрузить {Path.GetFileName(path)}: {ex.Message}");
         }
     }
 

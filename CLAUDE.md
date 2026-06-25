@@ -28,7 +28,7 @@
 
 ---
 
-## Текущее состояние — v2.2
+## Текущее состояние — v2.3
 
 Директория `c:\Users\Zver\Documents\Claude\SonarCS\` — актуальный исходник.
 
@@ -40,8 +40,9 @@
 | v2.0 | 2026-06-22 | Режим голосовых команд: IntentMatcher, CommandExecutor, CommandsForm |
 | v2.1 | 2026-06-25 | Нормализация в StartsWithTrigger, сортировка SimpleRulesN, удалён ShowBalloonTip |
 | v2.2 | 2026-06-25 | commands_user.txt (пользовательские команды), AppDiscovery (Start Menu + fuzzy) |
+| v2.3 | 2026-06-25 | Папка user/ для всех файлов пользователя; справка в AboutForm; фикс SettingsForm |
 
-Бэкапы: `Backup\V1.0\`, `Backup\V1.1\`, `Backup\V1.2\`, `Backup\V2.0\`, `Backup\V2.1\`
+Бэкапы: `Backup\V1.0\`, `Backup\V1.1\`, `Backup\V1.2\`, `Backup\V2.0\`, `Backup\V2.1\`, `Backup\V2.2\`
 
 ---
 
@@ -76,8 +77,8 @@ NAudio WaveInEvent. `DeviceNumber = -1` передаётся напрямую (W
 Жадный поиск слева направо, длинные ключи в приоритете (список отсортирован по убыванию длины).
 Совпадение засчитывается только на **границах слов** (пробел / начало/конец строки / пунктуация) —
 это критически важно, иначе «а особенно» превращается в «АОсобенно».
-Четыре словаря: `dictionary_oil_gas.txt`, `dictionary_legal.txt`, `dictionary_economy.txt`, `dictionary_user.txt`.
-Отсутствие файла словаря не является ошибкой — движок просто не загружает его.
+Четыре словаря из папки `user/`: `dictionary_oil_gas.txt`, `dictionary_legal.txt`, `dictionary_economy.txt`, `dictionary_user.txt`.
+Пути берутся из `AppConfig.Dict*File` (не хардкодятся). Отсутствие файла не является ошибкой.
 
 ### IntentMatcher — голосовые команды (~0 мс, без LLM)
 Статический класс, сопоставляет транскрипт команды с действием Windows.
@@ -89,7 +90,7 @@ NAudio WaveInEvent. `DeviceNumber = -1` передаётся напрямую (W
   правила проверяются первыми, короткие не перехватывают более специфичные совпадения.
 - `AppNames` — канонический список приложений для `CommandsForm` (единственный источник истины).
   При добавлении приложения обновлять `AppNames`, `LaunchApps` и `CommandExecutor.AppAliases`.
-- `UserCommands` — загружается из `commands_user.txt` при старте; наивысший приоритет.
+- `UserCommands` — загружается из `AppConfig.CommandsUserFile` (`user/commands_user.txt`) при старте; наивысший приоритет.
   Формат: `фраза = URL/путь`. Действие `shell_open`, исполняется через `ShellOpen`.
 - Порядок матчинга: `TryUserCommand` → `TryLaunch` → `TryOpenFolder` → `TrySetVolume` → `TryTypeText` → `TrySimple` → `TryAutoLaunch`.
 
@@ -183,7 +184,7 @@ RichTextBox с категоризированным списком команд.
 | AutoStartManager.cs | Автозапуск через реестр HKCU |
 | OverlayForm.cs | Полупрозрачная плашка-индикатор у курсора мыши (7 состояний + ошибки) |
 | Logger.cs | Потокобезопасный лог (sonar.log + unknown_commands.log, ротация 1 МБ) |
-| AboutForm.cs | Окно «О программе» |
+| AboutForm.cs | Окно «О программе»: вкладка «О программе» + вкладка «Справка» с полным руководством |
 | Program.cs | Точка входа, [STAThread] |
 
 ---
@@ -217,5 +218,5 @@ dotnet publish Sonar.csproj --configuration Release --runtime win-x64 --self-con
 - **Normalize в StartsWithTrigger**: триггер и входной текст нормализуются через IntentMatcher.Normalize() — без этого триггер не срабатывает при смешанном скрипте GigaAM.
 - **Три места при добавлении приложения**: IntentMatcher.AppNames + IntentMatcher.LaunchApps + CommandExecutor.AppAliases.
 - **AppDiscovery ленивый**: `_apps` инициализируется при первом `TryMatch` или `AppCount`. Первый вызов занимает ~10 мс на сканирование Start Menu — нормально.
-- **commands_user.txt загружается один раз**: изменения файла требуют перезапуска приложения.
+- **user/commands_user.txt загружается один раз**: изменения файла требуют перезапуска приложения.
 - **Порог Левенштейна по длине слова**: ≤3 букв → 0 (точное совпадение), 4–5 → 1, 6+ → 2. Короткие запросы фильтруются `w.Length >= 2`. Ложные срабатывания логируются в sonar.log для анализа.

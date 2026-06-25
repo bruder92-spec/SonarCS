@@ -5,7 +5,7 @@ using NAudio.CoreAudioApi;
 namespace Sonar;
 
 /// <summary>
-/// Исполняет команды, разобранные CommandEngine.
+/// Исполняет команды, разобранные IntentMatcher.
 /// Использует SendInput/keybd_event, Process.Start и Windows API.
 /// </summary>
 public static class CommandExecutor

@@ -110,17 +110,17 @@ public sealed class SettingsForm : Form
 
         _chkOilGas = Add(MakeDictCheckBox(
             "Нефтегазовый  (ЭЦН, ГРП, НДПИ…)",
-            "dictionary_oil_gas.txt", cfg.DictOilGas, m, y));
+            AppConfig.DictOilGasFile, cfg.DictOilGas, m, y));
         y += 28;
 
         _chkLegal = Add(MakeDictCheckBox(
             "Юридический  (ГК, УК, ЕГРЮЛ…)",
-            "dictionary_legal.txt", cfg.DictLegal, m, y));
+            AppConfig.DictLegalFile, cfg.DictLegal, m, y));
         y += 28;
 
         _chkEconomy = Add(MakeDictCheckBox(
             "Экономика / Финансы / Бухгалтерия  (НДС, ФОТ, МРОТ…)",
-            "dictionary_economy.txt", cfg.DictEconomy, m, y));
+            AppConfig.DictEconomyFile, cfg.DictEconomy, m, y));
         y += 28;
 
         Add(Separator(ref y));
@@ -295,9 +295,9 @@ public sealed class SettingsForm : Form
     // ── Вспомогательные методы построения UI ─────────────────────────────────
     private T Add<T>(T ctrl) where T : Control { Controls.Add(ctrl); return ctrl; }
 
-    private static CheckBox MakeDictCheckBox(string label, string filename, bool cfgValue, int m, int y)
+    private static CheckBox MakeDictCheckBox(string label, string fullPath, bool cfgValue, int m, int y)
     {
-        bool exists = File.Exists(Path.Combine(AppContext.BaseDirectory, filename));
+        bool exists = File.Exists(fullPath);
         return new CheckBox
         {
             Text      = exists ? label : $"{label}  (файл не найден)",
